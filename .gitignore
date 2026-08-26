@@ -1,0 +1,26 @@
+# Codex local state
+.agents/
+.codex/
+
+# Local environments
+.conda/
+.venv/
+
+# Generated datasets, checkpoints and caches
+data/*
+!data/README.md
+
+# OpenPI default outputs
+checkpoints/
+wandb/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Local secrets
+.env
+

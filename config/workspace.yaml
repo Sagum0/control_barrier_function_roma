@@ -1,0 +1,11 @@
+paths:
+  openpi_root: third_party/openpi
+  dataset_root: data/datasets
+  episode_root: data/episodes
+  run_root: data/runs
+  cache_root: data/cache
+
+cache:
+  huggingface: data/cache/huggingface
+  openpi: data/cache/openpi
+  torch: data/cache/torch

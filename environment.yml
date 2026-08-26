@@ -1,0 +1,12 @@
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11
+  - pip
+  - git-lfs
+  - ffmpeg
+  - pip:
+      - uv==0.12.5
+      - PyYAML
+      - roslibpy
