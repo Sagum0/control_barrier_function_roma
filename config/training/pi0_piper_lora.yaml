@@ -1,0 +1,61 @@
+schema_version: 3
+
+paths:
+  dataset_root: data/datasets/two_block_pnp
+  assets_base_dir: data/assets
+  runs_root: data/runs
+  base_params: data/cache/openpi/openpi-assets/checkpoints/pi0_base/params
+
+dataset:
+  asset_id: two_block_pnp
+
+finetuning:
+  # trainable: Vision encoder까지 학습한다. 새 카메라·배경·조명에 적응하기 좋지만 VRAM과 과적합 위험이 더 크다.
+  # frozen: Vision encoder는 고정하고 LoRA와 action projection만 학습한다. 메모리를 줄이고 작은 데이터의 과적합을 완화할 수 있다.
+  # 두 모드의 optimizer state 구조가 다르므로 값을 바꿀 때는 --resume 없이 새로운 --run-name을 사용한다.
+  vision_encoder: trainable
+
+training:
+  num_train_steps: 30000
+  batch_size: 32
+  num_workers: 2
+  log_interval: 30
+  save_interval: 5000
+  keep_period: 5000
+  seed: 42
+
+runtime:
+  jax_memory_fraction: 0.70
+  # TTY dashboard 갱신 간격(초). 학습 계산·JSONL 기록 주기에는 영향을 주지 않는다.
+  progress_refresh_seconds: 1.0
+
+optimizer:
+  name: adamw
+  b1: 0.9
+  b2: 0.95
+  eps: 1.0e-8
+  weight_decay: 1.0e-10
+  clip_gradient_norm: 1.0
+
+lr_schedule:
+  name: cosine_decay
+  warmup_steps: 1000
+  peak_lr: 2.5e-5
+  decay_steps: 30000
+  decay_lr: 2.5e-6
+
+model_contract:
+  openpi_profile: pi0_libero_low_mem_finetune
+  pi05: false
+  paligemma_variant: gemma_2b_lora
+  action_expert_variant: gemma_300m_lora
+  dtype: bfloat16
+  action_dim: 32
+  action_horizon: 50
+  max_token_len: 48
+  robot_dim: 7
+  delta_joint_dim: 6
+  normalization: zscore
+  freeze_mode: official_lora_filter
+  ema_decay: null
+  fsdp_devices: 1

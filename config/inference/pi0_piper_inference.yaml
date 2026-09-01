@@ -1,0 +1,19 @@
+schema_version: 1
+
+checkpoint:
+  runs_root: data/runs
+  config_name: pi0_piper_lora
+  run_name: two_block_pnp_b32_vt_s30000_r002
+  asset_id: two_block_pnp
+  step: 30000
+
+policy:
+  prompt: "pick up the green blocks one at a time and place them in the white box"
+  num_inference_steps: 10
+
+server:
+  host: 127.0.0.1
+  port: 8000
+
+runtime:
+  jax_memory_fraction: 0.70

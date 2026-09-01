@@ -1,0 +1,19 @@
+schema_version: 1
+
+checkpoint:
+  runs_root: data/runs
+  config_name: pi0_piper_lora
+  run_name: your_completed_run_name
+  asset_id: your_norm_asset_id
+  step: 30000
+
+policy:
+  prompt: "use the exact task prompt stored in the training dataset"
+  num_inference_steps: 10
+
+server:
+  host: 127.0.0.1
+  port: 8000
+
+runtime:
+  jax_memory_fraction: 0.70
