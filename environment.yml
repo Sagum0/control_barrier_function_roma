@@ -10,3 +10,6 @@ dependencies:
       - uv==0.12.5
       - PyYAML
       - roslibpy
+      # 기존 vla_pipeline LeRobot 0.6 AsyncInference 호환 서버의 직접 의존성이다.
+      - grpcio==1.83.0
+      - protobuf==7.36.0

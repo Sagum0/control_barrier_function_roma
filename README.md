@@ -34,4 +34,16 @@ config/
   --check-only
 ```
 
+## 기존 vla_pipeline용 gRPC 서버
+
+```bash
+./scripts/inference/serve_vla_pipeline.py \
+  --config config/inference/pi0_piper_vla_pipeline.yaml \
+  --step 30000 \
+  --check-only
+```
+
+실행·원격 client 주소 설정은
+[`docs/inference/VLA_PIPELINE_SERVER.md`](./docs/inference/VLA_PIPELINE_SERVER.md)에 있다.
+
 상세 문서는 [`docs/README.md`](./docs/README.md)에 있다.

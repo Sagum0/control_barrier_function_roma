@@ -1,7 +1,12 @@
 # Piper π0 추론 서버
 
-현재 구현된 범위는 **완료된 학습 checkpoint를 읽는 OpenPI WebSocket 정책 서버**까지다.
-실제 로봇으로 action을 보내는 ROS2 어댑터는 다음 단계에서 별도 process로 만든다.
+현재는 완료된 학습 checkpoint를 읽는 서버 표면을 두 가지 제공한다.
+
+- 새 adapter용 OpenPI WebSocket 정책 서버
+- 기존 `vla_pipeline` LeRobot 0.6 client용 AsyncInference gRPC 서버
+
+두 서버 모두 같은 OpenPI policy와 checkpoint 내 norm stats를 사용한다. 실제 ROS action
+발행, chunk 집계, rosbridge 연결은 기존 `vla_pipeline` client가 그대로 담당한다.
 
 ## 기준으로 삼은 로봇 코드
 
@@ -12,7 +17,9 @@
 - 확인 commit: `74c35ccb551e395e0201ac889d21dd4a4bd7ee14`
 - 로컬 확인 경로: `/home/pc/RoMaLab_dev_e2e_piper`
 
-`/home/pc/piper_ws`와 과거 `vla_pipeline` 코드는 사용하지 않았다.
+ROS 토픽·단위·chunk 계약은 위 RoMaLab branch만 기준으로 삼았다. LeRobot gRPC wire
+계약은 공식 LeRobot `v0.6.0`과 기존 `/home/pc/vla_pipeline-main` client를 대조했다.
+`/home/pc/piper_ws`는 사용하지 않았다.
 
 ## 전체 구조
 
@@ -46,14 +53,20 @@ JAX 환경과 ROS2 Humble 환경의 Python 버전이 다르므로 모델 서버�
 
 ```text
 config/inference/pi0_piper_inference.yaml
+config/inference/pi0_piper_vla_pipeline.yaml
 scripts/inference/serve_policy.py
+scripts/inference/serve_vla_pipeline.py
 src/piper_vla/inference/
 ├── settings.py           # strict YAML과 workspace 경로 검증
 ├── checkpoint.py         # 완료 Orbax step과 내장 norm stats 검증
 ├── observation.py        # RGB/state 입력과 (50, 7) 출력 계약
 ├── romalab_contract.py   # dev_e2e_piper ROS2 토픽·단위 계약
-└── policy_server.py      # OpenPI policy restore와 WebSocket server
+├── policy_server.py      # OpenPI policy restore와 WebSocket server
+└── lerobot_grpc.py       # LeRobot 0.6 AsyncInference gRPC 호환 표면
 ```
+
+기존 `vla_pipeline`을 유지하는 실행법과 검증 범위는
+[`VLA_PIPELINE_SERVER.md`](./VLA_PIPELINE_SERVER.md)에 분리해 두었다.
 
 ## 1. 학습 중에 할 수 있는 검사
 

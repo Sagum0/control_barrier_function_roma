@@ -19,6 +19,9 @@ PYTHONPATH=src .conda/env/bin/python -m unittest discover \
 - RGB `(480, 640, 3)`와 state `(7,)` canonical 입력
 - finite absolute action `(50, 7)` 출력
 - OpenPI policy 앞뒤의 입출력 검증 wrapper
+- LeRobot 0.6 protobuf field 번호와 AsyncInference 네 RPC path
+- 기존 client handshake feature·raw key·TimedAction pickle 호환
+- CPU loopback의 Ready → instruction → observation → actions 전체 순서
 
 실제 step 30000 weight restore, 첫 JIT, inference latency는 학습이 끝난 뒤 별도 GPU
 smoke로 검사한다. ROS2 action 발행은 그 다음 단계이며 이 테스트에서는 실행하지 않는다.
