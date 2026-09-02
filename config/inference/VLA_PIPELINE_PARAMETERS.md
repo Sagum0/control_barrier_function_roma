@@ -1,14 +1,14 @@
-# π0 비동기 추론 설정 가이드
+# π0 동기·비동기 추론 설정 가이드
 
 설정 파일은 [`pi0_piper_vla_pipeline.yaml`](./pi0_piper_vla_pipeline.yaml)이다.
-이 파일 하나가 **π0 모델 서버 설정**과 **기존 LeRobot async client 실행 계약**을
-함께 보관한다.
+이 파일 하나가 **π0 모델 서버 설정**과 **Piper sync/async client 실행 계약**을 함께
+보관한다.
 
 쉽게 말하면 다음 세 가지를 정한다.
 
 1. 어떤 학습 결과를 불러올지 정한다.
 2. π0가 action 50개를 어떻게 계산하고 몇 개를 보낼지 정한다.
-3. 기존 action과 새 action이 겹칠 때 client가 어떻게 합칠지 정한다.
+3. 추론과 action 실행을 겹칠지(`async`) 순서대로 할지(`sync`) 정한다.
 
 ## 1분 요약
 
@@ -18,14 +18,16 @@
 policy:
   num_inference_steps: 10
 
-async_client:
+client:
+  mode: async
   episode_time_seconds: 35
   actions_per_chunk: 50
-  chunk_size_threshold: 0.50
-  aggregate_fn_name: weighted_average
   fps: 20
   observation_queue_timeout_seconds: 1.0
-  debug_visualize_queue_size: true
+  async_options:
+    chunk_size_threshold: 0.50
+    aggregate_fn_name: weighted_average
+    debug_visualize_queue_size: true
 ```
 
 이 설정은 다음처럼 동작한다.
@@ -47,17 +49,19 @@ client에 action 50개 전송
 | 구분 | 설정 | 실제 적용 위치 |
 |---|---|---|
 | 모델 | `num_inference_steps` | π0 GPU 추론 |
+| client | `mode` | launcher가 sync/async 실행 경로 선택 |
 | client | `episode_time_seconds` | control loop 시작 후 자동 종료 타이머 |
 | 서버 | `actions_per_chunk` | server가 client 요청값과 일치하는지 강제 |
 | 서버 | `fps` | action timestamp 간격 계산 |
 | 서버 | `observation_queue_timeout_seconds` | observation 대기 시간 |
-| client | `chunk_size_threshold` | Piper PC action queue |
-| client | `aggregate_fn_name` | Piper PC에서 이전·신규 chunk 합성 |
-| client | `debug_visualize_queue_size` | Piper PC 진단 화면 |
+| async client만 | `async_options.chunk_size_threshold` | Piper PC action queue |
+| async client만 | `async_options.aggregate_fn_name` | 이전·신규 chunk 합성 |
+| async client만 | `async_options.debug_visualize_queue_size` | queue 진단 화면 |
 
 현재 LeRobot 0.6 handshake는 `actions_per_chunk`만 서버에 전달한다.
 따라서 threshold와 합성 방식은 서버가 원격으로 강제할 수 없다. 대신 vla_ws client
-launcher가 같은 YAML을 읽어 기존 client에 값을 직접 전달한다.
+launcher가 `mode: async`일 때만 같은 YAML 값을 기존 client에 직접 전달한다. `mode:
+sync`이면 세 async 옵션은 명령에 포함하지 않고 전부 무시한다.
 
 ```bash
 ./scripts/inference/run_vla_pipeline_client.py \
@@ -189,7 +193,21 @@ jax_memory_fraction: 0.70
 큰 pool을 예약한 것으로 보일 수 있다. 너무 낮으면 weight 복원이나 첫 JIT에서 OOM이
 날 수 있고, 너무 높으면 같은 GPU의 다른 process가 사용할 공간이 줄어든다.
 
-## `async_client`: 비동기 chunk 실행
+## `client`: 동기·비동기 실행
+
+### `mode`
+
+```yaml
+mode: async  # 또는 sync
+```
+
+- `async`: 관측 전송, 서버 추론, 기존 action 실행을 서로 다른 실행 흐름에서 중첩한다.
+  queue가 threshold 이하가 되면 다음 관측을 보내고 겹치는 chunk를 설정된 방식으로 합친다.
+- `sync`: 관측 하나를 보낸 뒤 추론 완료까지 기다린다. 응답 chunk 전체를 `fps` 주기로
+  실행한 후에만 다음 관측을 보낸다. 추론 중에는 action 발행이 멈춘다.
+
+모드 변경 후 서버와 client를 모두 재시작한다. 실행 명령은 바뀌지 않으며 launcher가
+YAML을 읽어 알맞은 client module을 선택한다.
 
 ### `episode_time_seconds`
 
@@ -199,9 +217,9 @@ control loop가 시작된 뒤 자동으로 종료할 시간을 초 단위로 지
 episode_time_seconds: 35
 ```
 
-위 설정은 35초 뒤 기존 `vla_pipeline` client의 `shutdown_event`를 설정하므로 action 발행,
-ROS 연결 및 세션 로그가 정상 종료 절차를 밟는다. 서버 시작이나 모델 weight 로딩 시간은
-35초에 포함하지 않는다.
+위 설정은 control loop 시작 후 35초에 action 발행을 멈추고 ROS 연결을 정리한다. 서버
+시작이나 모델 weight 로딩 시간은 35초에 포함하지 않는다. async에서는 기존 client의
+`shutdown_event`, sync에서는 vla_ws 동기 loop의 monotonic deadline으로 적용한다.
 
 무제한으로 실행하려면 `null`을 사용한다.
 
@@ -209,9 +227,9 @@ ROS 연결 및 세션 로그가 정상 종료 절차를 밟는다. 서버 시작
 episode_time_seconds: null
 ```
 
-생성된 client 명령은 제한 모드에서 `PIPER_EPISODE_TIME_S=35`, 무제한 모드에서
-`PIPER_EPISODE_TIME_S=`를 명시해 이전 shell에 남은 환경변수까지 덮어쓴다. 숫자는 유한한
-양수만 허용한다.
+async 명령은 제한 모드에서 `PIPER_EPISODE_TIME_S=35`, 무제한 모드에서
+`PIPER_EPISODE_TIME_S=`를 명시한다. sync 명령은 시간을 직접 인자로 전달하며 상속된
+`PIPER_EPISODE_TIME_S`를 지운다. 숫자는 유한한 양수만 허용한다.
 
 ### `actions_per_chunk`
 
@@ -229,7 +247,7 @@ actions_per_chunk: 50
 서버는 client handshake의 값이 YAML과 다르면 연결을 거부한다. 모델의 고정
 `action_horizon=50` 자체를 100으로 늘리는 설정은 아니다.
 
-### `chunk_size_threshold`
+### `async_options.chunk_size_threshold` — async 전용
 
 client action queue가 어느 정도 남았을 때 새 관측을 서버로 보낼지 정한다.
 
@@ -244,9 +262,10 @@ chunk_size_threshold: 0.50
 - `0.7`: 약 35개 남았을 때 요청한다. 더 일찍 재계획한다.
 - `1.0`: 거의 매 control tick 요청할 수 있어 GPU·네트워크 부하가 커진다.
 
-정확한 요청 시점에는 서버 지연과 client thread scheduling도 영향을 준다.
+정확한 요청 시점에는 서버 지연과 client thread scheduling도 영향을 준다. `mode: sync`는
+chunk 전체를 소진한 뒤 다음 관측을 보내므로 이 값을 읽지 않는다.
 
-### `aggregate_fn_name`
+### `async_options.aggregate_fn_name` — async 전용
 
 이전 chunk와 새 chunk가 같은 timestep에서 겹칠 때 합치는 방법이다.
 
@@ -258,7 +277,8 @@ chunk_size_threshold: 0.50
 | `conservative` | 기존 70% + 신규 30% | 기존 계획을 더 오래 신뢰 |
 
 현재 권장 시작값은 `weighted_average`다. 30/70 숫자는 LeRobot 0.6에 고정된 함수
-정의이며 YAML에서 가중치 숫자만 따로 바꾸는 기능은 없다.
+정의이며 YAML에서 가중치 숫자만 따로 바꾸는 기능은 없다. `mode: sync`는 서로 겹치는
+chunk가 없으므로 aggregation 함수 자체를 호출하지 않는다.
 
 ### `fps`
 
@@ -284,7 +304,7 @@ observation_queue_timeout_seconds: 1.0
 너무 길면 연결 이상을 늦게 발견하고, 너무 짧으면 정상적인 네트워크 흔들림에도 빈 응답이
 늘어난다. LAN에서는 `1.0`을 시작값으로 권장한다.
 
-### `debug_visualize_queue_size`
+### `async_options.debug_visualize_queue_size` — async 전용
 
 기존 client에서 action queue 크기 진단 화면을 표시한다.
 
@@ -292,8 +312,9 @@ observation_queue_timeout_seconds: 1.0
 debug_visualize_queue_size: true
 ```
 
-모델 결과나 제어 수학은 바뀌지 않는다. 초기 E2E 시험에서는 `true`, 장시간 운영에서
-진단 창이 필요 없으면 `false`가 적당하다.
+모델 결과나 제어 수학은 바뀌지 않는다. 초기 async E2E 시험에서는 `true`, 장시간
+운영에서 진단 창이 필요 없으면 `false`가 적당하다. sync에서는 action queue가 없으므로
+값과 관계없이 그래프를 표시하지 않는다.
 
 ## 실행 순서
 
@@ -327,8 +348,9 @@ debug_visualize_queue_size: true
   --config config/inference/pi0_piper_vla_pipeline.yaml
 ```
 
-launcher가 `lerobot-060` 환경과 기존 `/home/pc/vla_pipeline/piper_bridge.async_client`를
-자동으로 사용한다. 수동 client 명령은 함께 실행하지 않는다.
+launcher가 `lerobot-060` 환경을 자동으로 사용한다. async이면 기존
+`/home/pc/vla_pipeline/piper_bridge.async_client`, sync이면 vla_ws의
+`piper_vla.inference.sync_client`를 선택한다. 수동 client 명령은 함께 실행하지 않는다.
 
 ## 비교 실험 원칙
 

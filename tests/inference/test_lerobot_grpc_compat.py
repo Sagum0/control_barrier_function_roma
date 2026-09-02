@@ -98,7 +98,7 @@ def _server_settings(actions_per_chunk: int = 32) -> SimpleNamespace:
 
     return SimpleNamespace(
         server=SimpleNamespace(host="127.0.0.1", port=0),
-        async_client=SimpleNamespace(
+        client=SimpleNamespace(
             observation_queue_timeout_seconds=1.0,
             actions_per_chunk=actions_per_chunk,
             fps=20,

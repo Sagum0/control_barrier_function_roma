@@ -11,7 +11,7 @@ from typing import Any
 import yaml
 
 from piper_vla.inference.async_client_settings import (
-    validate_async_client_values,
+    validate_client_values,
 )
 
 # 기본 WebSocket 설정이 사용하는 이전 추론 schema다.
@@ -20,8 +20,11 @@ LEGACY_INFERENCE_SCHEMA_VERSION = 1
 # 시간 제한이 없던 기존 async client schema다.
 LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION = 2
 
-# episode 시간 제한까지 포함하는 현재 추론 schema다.
-INFERENCE_SCHEMA_VERSION = 3
+# episode 시간 제한까지 포함하던 이전 async 전용 schema다.
+LEGACY_TIMED_ASYNC_INFERENCE_SCHEMA_VERSION = 3
+
+# 동기·비동기 모드 선택과 조건부 옵션을 포함하는 현재 추론 schema다.
+INFERENCE_SCHEMA_VERSION = 4
 
 # 학습과 동일하게 사용하는 OpenPI config namespace다.
 PIPER_PI0_CONFIG_NAME = "pi0_piper_lora"
@@ -34,8 +37,8 @@ LEGACY_TOP_LEVEL_KEYS = frozenset(
     {"schema_version", "checkpoint", "policy", "server", "runtime"}
 )
 
-# async client 설정 파일 최상위에서 허용하는 key다.
-TOP_LEVEL_KEYS = frozenset(
+# schema 2·3 async client 설정 파일 최상위에서 허용하는 key다.
+LEGACY_ASYNC_TOP_LEVEL_KEYS = frozenset(
     {
         "schema_version",
         "checkpoint",
@@ -43,6 +46,18 @@ TOP_LEVEL_KEYS = frozenset(
         "server",
         "runtime",
         "async_client",
+    }
+)
+
+# 현재 동기·비동기 client 설정 파일 최상위에서 허용하는 key다.
+TOP_LEVEL_KEYS = frozenset(
+    {
+        "schema_version",
+        "checkpoint",
+        "policy",
+        "server",
+        "runtime",
+        "client",
     }
 )
 
@@ -71,7 +86,28 @@ LEGACY_ASYNC_CLIENT_KEYS = frozenset(
 )
 
 # schema 3 async_client section에서 허용하는 key다.
-ASYNC_CLIENT_KEYS = LEGACY_ASYNC_CLIENT_KEYS | {"episode_time_seconds"}
+TIMED_ASYNC_CLIENT_KEYS = LEGACY_ASYNC_CLIENT_KEYS | {"episode_time_seconds"}
+
+# schema 4 client 공통 section에서 허용하는 key다.
+CLIENT_KEYS = frozenset(
+    {
+        "mode",
+        "episode_time_seconds",
+        "actions_per_chunk",
+        "fps",
+        "observation_queue_timeout_seconds",
+        "async_options",
+    }
+)
+
+# 비동기 모드에서만 client 동작에 사용하는 key다.
+ASYNC_OPTIONS_KEYS = frozenset(
+    {
+        "chunk_size_threshold",
+        "aggregate_fn_name",
+        "debug_visualize_queue_size",
+    }
+)
 
 # LeRobot 0.6 async client가 제공하는 chunk 합성 함수다.
 ASYNC_AGGREGATE_FUNCTIONS = frozenset(
@@ -166,8 +202,20 @@ class InferenceRuntimeSettings:
 
 
 @dataclasses.dataclass(frozen=True)
-class AsyncClientSettings:
-    """LeRobot async client와 gRPC server가 공유하는 실행 계약이다."""
+class AsyncClientOptions:
+    """비동기 client에서만 사용하는 queue·aggregation 설정이다."""
+
+    chunk_size_threshold: float
+    aggregate_fn_name: str
+    debug_visualize_queue_size: bool
+
+
+@dataclasses.dataclass(frozen=True)
+class InferenceClientSettings:
+    """동기·비동기 client와 gRPC server가 공유하는 실행 계약이다."""
+
+    # async는 추론·제어 중첩, sync는 chunk 단위 순차 실행이다.
+    mode: str
 
     # control loop 시작 후 자동 종료할 시간이다. None이면 무제한으로 실행한다.
     episode_time_seconds: float | None
@@ -175,20 +223,14 @@ class AsyncClientSettings:
     # π0가 생성한 50개 action 중 client에 보낼 개수다.
     actions_per_chunk: int
 
-    # client queue가 이 비율 이하로 남으면 새 관측을 보내는 기준이다.
-    chunk_size_threshold: float
-
-    # 겹치는 이전·신규 action을 client에서 합치는 함수 이름이다.
-    aggregate_fn_name: str
-
     # action을 실행하고 timestamp를 만드는 제어 주파수다.
     fps: int
 
     # 서버가 새 observation을 기다리는 최대 시간이다.
     observation_queue_timeout_seconds: float
 
-    # client queue 크기 진단 창을 표시할지 정하는 값이다.
-    debug_visualize_queue_size: bool
+    # sync에서는 무시하고 async에서만 적용하는 옵션 묶음이다.
+    async_options: AsyncClientOptions
 
 
 @dataclasses.dataclass(frozen=True)
@@ -213,8 +255,8 @@ class Pi0InferenceSettings:
     # JAX process 자원 설정이다.
     runtime: InferenceRuntimeSettings
 
-    # async schema에서 제공하는 LeRobot 실행 계약이다.
-    async_client: AsyncClientSettings | None
+    # gRPC client를 사용하는 schema에서 제공하는 실행 계약이다.
+    client: InferenceClientSettings | None
 
 
 def _require_mapping(value: Any, *, field_name: str) -> dict[str, Any]:
@@ -322,14 +364,17 @@ def load_pi0_inference_settings(
         _require_exact_keys(root, LEGACY_TOP_LEVEL_KEYS, field_name="config")
     elif schema_version in {
         LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION,
-        INFERENCE_SCHEMA_VERSION,
+        LEGACY_TIMED_ASYNC_INFERENCE_SCHEMA_VERSION,
     }:
+        _require_exact_keys(root, LEGACY_ASYNC_TOP_LEVEL_KEYS, field_name="config")
+    elif schema_version == INFERENCE_SCHEMA_VERSION:
         _require_exact_keys(root, TOP_LEVEL_KEYS, field_name="config")
     else:
         raise ValueError(
             f"지원하지 않는 추론 schema입니다: "
             f"expected={LEGACY_INFERENCE_SCHEMA_VERSION} 또는 "
             f"{LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION} 또는 "
+            f"{LEGACY_TIMED_ASYNC_INFERENCE_SCHEMA_VERSION} 또는 "
             f"{INFERENCE_SCHEMA_VERSION}, actual={schema_version}"
         )
 
@@ -342,10 +387,10 @@ def load_pi0_inference_settings(
     _require_exact_keys(server_raw, SERVER_KEYS, field_name="server")
     _require_exact_keys(runtime_raw, RUNTIME_KEYS, field_name="runtime")
 
-    async_client_raw: dict[str, Any] | None = None
+    client_raw: dict[str, Any] | None = None
     if schema_version in {
         LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION,
-        INFERENCE_SCHEMA_VERSION,
+        LEGACY_TIMED_ASYNC_INFERENCE_SCHEMA_VERSION,
     }:
         async_client_raw = _require_mapping(
             root["async_client"],
@@ -355,12 +400,40 @@ def load_pi0_inference_settings(
             async_client_raw,
             LEGACY_ASYNC_CLIENT_KEYS
             if schema_version == LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION
-            else ASYNC_CLIENT_KEYS,
+            else TIMED_ASYNC_CLIENT_KEYS,
             field_name="async_client",
         )
         if schema_version == LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION:
             async_client_raw = dict(async_client_raw)
             async_client_raw["episode_time_seconds"] = None
+        client_raw = {
+            "mode": "async",
+            "episode_time_seconds": async_client_raw["episode_time_seconds"],
+            "actions_per_chunk": async_client_raw["actions_per_chunk"],
+            "fps": async_client_raw["fps"],
+            "observation_queue_timeout_seconds": async_client_raw[
+                "observation_queue_timeout_seconds"
+            ],
+            "async_options": {
+                "chunk_size_threshold": async_client_raw["chunk_size_threshold"],
+                "aggregate_fn_name": async_client_raw["aggregate_fn_name"],
+                "debug_visualize_queue_size": async_client_raw[
+                    "debug_visualize_queue_size"
+                ],
+            },
+        }
+    elif schema_version == INFERENCE_SCHEMA_VERSION:
+        client_raw = _require_mapping(root["client"], field_name="client")
+        _require_exact_keys(client_raw, CLIENT_KEYS, field_name="client")
+        async_options_raw = _require_mapping(
+            client_raw["async_options"],
+            field_name="client.async_options",
+        )
+        _require_exact_keys(
+            async_options_raw,
+            ASYNC_OPTIONS_KEYS,
+            field_name="client.async_options",
+        )
 
     config_name = _validate_safe_name(
         _require_string(checkpoint_raw["config_name"], field_name="checkpoint.config_name"),
@@ -403,14 +476,23 @@ def load_pi0_inference_settings(
             f"{memory_fraction}; 허용={MIN_JAX_MEMORY_FRACTION}~{MAX_JAX_MEMORY_FRACTION}"
         )
 
-    async_client: AsyncClientSettings | None = None
-    if async_client_raw is not None:
-        async_values = validate_async_client_values(
-            async_client_raw,
+    client: InferenceClientSettings | None = None
+    if client_raw is not None:
+        client_values = validate_client_values(
+            client_raw,
             action_horizon=PI0_ACTION_HORIZON,
             aggregate_functions=ASYNC_AGGREGATE_FUNCTIONS,
         )
-        async_client = AsyncClientSettings(**async_values)
+        client = InferenceClientSettings(
+            mode=client_values["mode"],
+            episode_time_seconds=client_values["episode_time_seconds"],
+            actions_per_chunk=client_values["actions_per_chunk"],
+            fps=client_values["fps"],
+            observation_queue_timeout_seconds=client_values[
+                "observation_queue_timeout_seconds"
+            ],
+            async_options=AsyncClientOptions(**client_values["async_options"]),
+        )
 
     return Pi0InferenceSettings(
         config_path=resolved_config,
@@ -438,5 +520,5 @@ def load_pi0_inference_settings(
         ),
         server=InferenceServerSettings(host=host, port=port),
         runtime=InferenceRuntimeSettings(jax_memory_fraction=memory_fraction),
-        async_client=async_client,
+        client=client,
     )

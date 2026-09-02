@@ -115,9 +115,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error(f"--step은 양수여야 합니다: {namespace.step}")
 
     settings = load_pi0_inference_settings(namespace.config, WORKSPACE_ROOT)
-    async_client = settings.async_client
-    if async_client is None:
-        parser.error("vla_pipeline server config에는 async_client 설정이 필요합니다.")
+    client = settings.client
+    if client is None:
+        parser.error("vla_pipeline server config에는 client 설정이 필요합니다.")
     requested_step: int | str = "latest" if namespace.latest else (
         settings.checkpoint.step if namespace.step is None else namespace.step
     )
@@ -128,28 +128,38 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("Prompt             :", settings.policy.prompt)
     print("Inference steps    :", settings.policy.num_inference_steps)
     print("Transport          : LeRobot 0.6 AsyncInference gRPC")
+    print("Execution mode     :", client.mode)
     print("Server             :", f"{settings.server.host}:{settings.server.port}")
     print("JAX memory fraction:", settings.runtime.jax_memory_fraction)
     print(
         "Episode time       :",
         "unlimited"
-        if async_client.episode_time_seconds is None
-        else f"{async_client.episode_time_seconds:g}s",
+        if client.episode_time_seconds is None
+        else f"{client.episode_time_seconds:g}s",
     )
-    print("Actions per chunk  :", async_client.actions_per_chunk)
-    print("Queue threshold    :", async_client.chunk_size_threshold)
-    print("Aggregate function :", async_client.aggregate_fn_name)
-    print("Control FPS        :", async_client.fps)
-    print("Observation timeout:", async_client.observation_queue_timeout_seconds)
-    print("Queue visualization:", async_client.debug_visualize_queue_size)
+    print("Actions per chunk  :", client.actions_per_chunk)
+    print("Control FPS        :", client.fps)
+    print("Observation timeout:", client.observation_queue_timeout_seconds)
+    if client.mode == "async":
+        print("Queue threshold    :", client.async_options.chunk_size_threshold)
+        print("Aggregate function :", client.async_options.aggregate_fn_name)
+        print("Queue visualization:", client.async_options.debug_visualize_queue_size)
+    else:
+        print("Async options      : ignored in sync mode")
     if namespace.print_client_command:
         print("\nClient command:")
-        print(
-            build_vla_pipeline_client_command(
-                settings,
-                requested_step=requested_step,
+        if client.mode == "async":
+            print(
+                build_vla_pipeline_client_command(
+                    settings,
+                    requested_step=requested_step,
+                )
             )
-        )
+        else:
+            print(
+                "./scripts/inference/run_vla_pipeline_client.py "
+                f"--config {settings.config_path} --print-command"
+            )
         base.assert_lightweight_import_boundary()
         return 0
     if namespace.print_config:

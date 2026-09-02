@@ -1,4 +1,4 @@
-"""LeRobot async client 설정값을 부작용 없이 엄격하게 검증한다."""
+"""LeRobot 동기·비동기 client 설정값을 부작용 없이 엄격하게 검증한다."""
 
 from __future__ import annotations
 
@@ -25,13 +25,17 @@ def _require_real(value: Any, *, field_name: str) -> float:
     return converted
 
 
-def validate_async_client_values(
+def validate_client_values(
     raw: dict[str, Any],
     *,
     action_horizon: int,
     aggregate_functions: frozenset[str],
 ) -> dict[str, Any]:
-    """strict-load된 async_client mapping을 dataclass 생성용 값으로 바꾼다."""
+    """strict-load된 client mapping을 dataclass 생성용 값으로 바꾼다."""
+
+    mode = raw["mode"]
+    if not isinstance(mode, str) or mode not in {"async", "sync"}:
+        raise ValueError(f"client.mode는 'async' 또는 'sync'여야 합니다: {mode!r}")
 
     episode_time_raw = raw["episode_time_seconds"]
     episode_time_seconds: float | None
@@ -40,73 +44,77 @@ def validate_async_client_values(
     else:
         episode_time_seconds = _require_real(
             episode_time_raw,
-            field_name="async_client.episode_time_seconds",
+            field_name="client.episode_time_seconds",
         )
         if episode_time_seconds <= 0.0:
             raise ValueError(
-                "async_client.episode_time_seconds는 양수 또는 null이어야 합니다: "
+                "client.episode_time_seconds는 양수 또는 null이어야 합니다: "
                 f"{episode_time_seconds}"
             )
 
     actions_per_chunk = _require_integer(
         raw["actions_per_chunk"],
-        field_name="async_client.actions_per_chunk",
+        field_name="client.actions_per_chunk",
     )
     if not 1 <= actions_per_chunk <= action_horizon:
         raise ValueError(
-            "async_client.actions_per_chunk 범위가 잘못됐습니다: "
+            "client.actions_per_chunk 범위가 잘못됐습니다: "
             f"{actions_per_chunk}; 허용=1~{action_horizon}"
         )
 
+    async_options = raw["async_options"]
     chunk_size_threshold = _require_real(
-        raw["chunk_size_threshold"],
-        field_name="async_client.chunk_size_threshold",
+        async_options["chunk_size_threshold"],
+        field_name="client.async_options.chunk_size_threshold",
     )
     if not 0.0 <= chunk_size_threshold <= 1.0:
         raise ValueError(
-            "async_client.chunk_size_threshold는 0.0~1.0이어야 합니다: "
+            "client.async_options.chunk_size_threshold는 0.0~1.0이어야 합니다: "
             f"{chunk_size_threshold}"
         )
 
-    aggregate_fn_name = raw["aggregate_fn_name"]
+    aggregate_fn_name = async_options["aggregate_fn_name"]
     if not isinstance(aggregate_fn_name, str) or not aggregate_fn_name.strip():
         raise TypeError(
-            "async_client.aggregate_fn_name은 비어 있지 않은 문자열이어야 합니다."
+            "client.async_options.aggregate_fn_name은 비어 있지 않은 문자열이어야 합니다."
         )
     aggregate_fn_name = aggregate_fn_name.strip()
     if aggregate_fn_name not in aggregate_functions:
         raise ValueError(
-            "async_client.aggregate_fn_name이 올바르지 않습니다: "
+            "client.async_options.aggregate_fn_name이 올바르지 않습니다: "
             f"actual={aggregate_fn_name!r}, allowed={sorted(aggregate_functions)}"
         )
 
-    fps = _require_integer(raw["fps"], field_name="async_client.fps")
+    fps = _require_integer(raw["fps"], field_name="client.fps")
     if not 1 <= fps <= 100:
-        raise ValueError(f"async_client.fps는 1~100이어야 합니다: {fps}")
+        raise ValueError(f"client.fps는 1~100이어야 합니다: {fps}")
 
     queue_timeout = _require_real(
         raw["observation_queue_timeout_seconds"],
-        field_name="async_client.observation_queue_timeout_seconds",
+        field_name="client.observation_queue_timeout_seconds",
     )
     if not 0.1 <= queue_timeout <= 60.0:
         raise ValueError(
-            "async_client.observation_queue_timeout_seconds는 0.1~60.0초여야 합니다: "
+            "client.observation_queue_timeout_seconds는 0.1~60.0초여야 합니다: "
             f"{queue_timeout}"
         )
 
-    debug_queue = raw["debug_visualize_queue_size"]
+    debug_queue = async_options["debug_visualize_queue_size"]
     if type(debug_queue) is not bool:
         raise TypeError(
-            "async_client.debug_visualize_queue_size는 bool이어야 합니다: "
+            "client.async_options.debug_visualize_queue_size는 bool이어야 합니다: "
             f"{debug_queue!r}"
         )
 
     return {
+        "mode": mode,
         "episode_time_seconds": episode_time_seconds,
         "actions_per_chunk": actions_per_chunk,
-        "chunk_size_threshold": chunk_size_threshold,
-        "aggregate_fn_name": aggregate_fn_name,
         "fps": fps,
         "observation_queue_timeout_seconds": queue_timeout,
-        "debug_visualize_queue_size": debug_queue,
+        "async_options": {
+            "chunk_size_threshold": chunk_size_threshold,
+            "aggregate_fn_name": aggregate_fn_name,
+            "debug_visualize_queue_size": debug_queue,
+        },
     }

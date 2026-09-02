@@ -25,19 +25,22 @@ def build_vla_pipeline_client_command(
 ) -> str:
     """같은 YAML 값으로 기존 Piper async client 실행 명령을 만든다."""
 
-    async_client = getattr(settings, "async_client", None)
-    if async_client is None:
+    client = getattr(settings, "client", None)
+    if client is None:
         raise ValueError(
-            "client 명령 생성에는 async_client 설정이 필요합니다."
+            "client 명령 생성에는 client 설정이 필요합니다."
         )
+    if client.mode != "async":
+        raise ValueError("기존 async client 명령은 client.mode=async에서만 생성합니다.")
 
     server_host = str(settings.server.host)
     if server_host in NON_ROUTABLE_SERVER_HOSTS:
         server_host = "GPU_SERVER_IP"
     server_address = f"{server_host}:{settings.server.port}"
     checkpoint_label = f"{settings.checkpoint.run_name}/{requested_step}"
-    debug_queue = str(async_client.debug_visualize_queue_size).lower()
-    episode_time = async_client.episode_time_seconds
+    async_options = client.async_options
+    debug_queue = str(async_options.debug_visualize_queue_size).lower()
+    episode_time = client.episode_time_seconds
     episode_time_environment = (
         "PIPER_EPISODE_TIME_S="
         if episode_time is None
@@ -54,10 +57,10 @@ def build_vla_pipeline_client_command(
         _shell_option("task", settings.policy.prompt),
         "--policy_device=cuda",
         "--client_device=cpu",
-        _shell_option("actions_per_chunk", async_client.actions_per_chunk),
-        _shell_option("chunk_size_threshold", async_client.chunk_size_threshold),
-        _shell_option("aggregate_fn_name", async_client.aggregate_fn_name),
-        _shell_option("fps", async_client.fps),
+        _shell_option("actions_per_chunk", client.actions_per_chunk),
+        _shell_option("chunk_size_threshold", async_options.chunk_size_threshold),
+        _shell_option("aggregate_fn_name", async_options.aggregate_fn_name),
+        _shell_option("fps", client.fps),
         _shell_option("debug_visualize_queue_size", debug_queue),
     ]
     return " \\\n  ".join(options)

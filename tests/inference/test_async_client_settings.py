@@ -15,10 +15,10 @@ TEST_PROMPT = "pick up the green blocks one at a time and place them in the whit
 
 
 def _config_text() -> str:
-    """현재 schema 3의 최소 유효 설정을 반환한다."""
+    """현재 schema 4의 최소 유효 설정을 반환한다."""
 
     return (
-        "schema_version: 3\n"
+        "schema_version: 4\n"
         "checkpoint:\n"
         "  runs_root: data/runs\n"
         "  config_name: pi0_piper_lora\n"
@@ -33,19 +33,50 @@ def _config_text() -> str:
         "  port: 8080\n"
         "runtime:\n"
         "  jax_memory_fraction: 0.7\n"
-        "async_client:\n"
+        "client:\n"
+        "  mode: async\n"
         "  episode_time_seconds: 35\n"
         "  actions_per_chunk: 50\n"
-        "  chunk_size_threshold: 0.5\n"
-        "  aggregate_fn_name: weighted_average\n"
         "  fps: 20\n"
         "  observation_queue_timeout_seconds: 1.0\n"
-        "  debug_visualize_queue_size: true\n"
+        "  async_options:\n"
+        "    chunk_size_threshold: 0.5\n"
+        "    aggregate_fn_name: weighted_average\n"
+        "    debug_visualize_queue_size: true\n"
     )
 
 
-class AsyncClientSettingsTest(unittest.TestCase):
-    """strict async 설정과 생성된 기존 client CLI를 검사한다."""
+def _legacy_schema2_text() -> str:
+    """시간 제한이 없던 schema 2 호환 fixture를 반환한다."""
+
+    return (
+        _config_text()
+        .replace("schema_version: 4", "schema_version: 2")
+        .replace("client:\n  mode: async\n", "async_client:\n")
+        .replace("  episode_time_seconds: 35\n", "")
+        .replace("  async_options:\n", "")
+        .replace("    chunk_size_threshold", "  chunk_size_threshold")
+        .replace("    aggregate_fn_name", "  aggregate_fn_name")
+        .replace("    debug_visualize_queue_size", "  debug_visualize_queue_size")
+    )
+
+
+def _legacy_schema3_text() -> str:
+    """직전 async 전용 schema 3 호환 fixture를 반환한다."""
+
+    return (
+        _config_text()
+        .replace("schema_version: 4", "schema_version: 3")
+        .replace("client:\n  mode: async\n", "async_client:\n")
+        .replace("  async_options:\n", "")
+        .replace("    chunk_size_threshold", "  chunk_size_threshold")
+        .replace("    aggregate_fn_name", "  aggregate_fn_name")
+        .replace("    debug_visualize_queue_size", "  debug_visualize_queue_size")
+    )
+
+
+class ClientSettingsTest(unittest.TestCase):
+    """strict sync/async 설정과 생성된 기존 client CLI를 검사한다."""
 
     def _load(self, text: str):
         """임시 workspace에서 설정 문자열을 load한다."""
@@ -58,18 +89,19 @@ class AsyncClientSettingsTest(unittest.TestCase):
         config_path.write_text(text, encoding="utf-8")
         return load_pi0_inference_settings(config_path, workspace)
 
-    def test_schema3_values_and_client_command(self) -> None:
+    def test_schema4_async_values_and_client_command(self) -> None:
         """YAML 값이 typed 설정과 client CLI에 그대로 반영돼야 한다."""
 
         settings = self._load(_config_text())
-        self.assertIsNotNone(settings.async_client)
-        async_client = settings.async_client
-        assert async_client is not None
-        self.assertEqual(async_client.episode_time_seconds, 35.0)
-        self.assertEqual(async_client.actions_per_chunk, 50)
-        self.assertEqual(async_client.chunk_size_threshold, 0.5)
-        self.assertEqual(async_client.aggregate_fn_name, "weighted_average")
-        self.assertEqual(async_client.fps, 20)
+        self.assertIsNotNone(settings.client)
+        client = settings.client
+        assert client is not None
+        self.assertEqual(client.mode, "async")
+        self.assertEqual(client.episode_time_seconds, 35.0)
+        self.assertEqual(client.actions_per_chunk, 50)
+        self.assertEqual(client.async_options.chunk_size_threshold, 0.5)
+        self.assertEqual(client.async_options.aggregate_fn_name, "weighted_average")
+        self.assertEqual(client.fps, 20)
 
         command = build_vla_pipeline_client_command(
             settings,
@@ -113,9 +145,9 @@ class AsyncClientSettingsTest(unittest.TestCase):
                 "episode_time_seconds: null",
             )
         )
-        async_client = settings.async_client
-        assert async_client is not None
-        self.assertIsNone(async_client.episode_time_seconds)
+        client = settings.client
+        assert client is not None
+        self.assertIsNone(client.episode_time_seconds)
         command = build_vla_pipeline_client_command(
             settings,
             requested_step=settings.checkpoint.step,
@@ -126,13 +158,31 @@ class AsyncClientSettingsTest(unittest.TestCase):
         """기존 schema 2 설정은 시간 제한이 없던 동작을 유지해야 한다."""
 
         settings = self._load(
-            _config_text()
-            .replace("schema_version: 3", "schema_version: 2")
-            .replace("  episode_time_seconds: 35\n", "")
+            _legacy_schema2_text()
         )
-        async_client = settings.async_client
-        assert async_client is not None
-        self.assertIsNone(async_client.episode_time_seconds)
+        client = settings.client
+        assert client is not None
+        self.assertEqual(client.mode, "async")
+        self.assertIsNone(client.episode_time_seconds)
+
+    def test_schema3_remains_async_for_compatibility(self) -> None:
+        """직전 schema 3 설정은 별도 mode 없이 async로 해석해야 한다."""
+
+        settings = self._load(_legacy_schema3_text())
+        client = settings.client
+        assert client is not None
+        self.assertEqual(client.mode, "async")
+        self.assertEqual(client.episode_time_seconds, 35.0)
+
+    def test_sync_mode_loads_but_rejects_legacy_async_command(self) -> None:
+        """sync는 같은 공통값을 읽되 기존 async 명령 생성 경로를 사용하지 않아야 한다."""
+
+        settings = self._load(_config_text().replace("mode: async", "mode: sync"))
+        client = settings.client
+        assert client is not None
+        self.assertEqual(client.mode, "sync")
+        with self.assertRaisesRegex(ValueError, "mode=async"):
+            build_vla_pipeline_client_command(settings, requested_step=30000)
 
 
 if __name__ == "__main__":

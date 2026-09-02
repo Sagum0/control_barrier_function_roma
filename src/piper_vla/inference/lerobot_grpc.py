@@ -768,16 +768,16 @@ def create_lerobot_grpc_server(
 
     import grpc
 
-    async_client = getattr(settings, "async_client", None)
-    if async_client is None:
+    client = getattr(settings, "client", None)
+    if client is None:
         raise ValueError(
-            "vla_pipeline gRPC server에는 async_client 설정이 필요합니다."
+            "vla_pipeline gRPC server에는 client 설정이 필요합니다."
         )
     service = LeRobotGrpcPolicyService(
         policy,
-        observation_queue_timeout_seconds=async_client.observation_queue_timeout_seconds,
-        expected_actions_per_chunk=async_client.actions_per_chunk,
-        control_fps=async_client.fps,
+        observation_queue_timeout_seconds=client.observation_queue_timeout_seconds,
+        expected_actions_per_chunk=client.actions_per_chunk,
+        control_fps=client.fps,
     )
     handlers = {
         "Ready": grpc.unary_unary_rpc_method_handler(

@@ -1,13 +1,15 @@
 # 기존 vla_pipeline용 π0 서버
 
-이 경로는 기존 `vla_pipeline`의 LeRobot 0.6 async client와 ROS publisher를 그대로
-사용하고, 원격 policy server의 내부 모델만 OpenPI π0로 교체한다.
+이 경로는 기존 `vla_pipeline`의 ROS bridge를 유지하면서 YAML의 `client.mode`에 따라
+LeRobot 0.6 async client 또는 vla_ws의 chunk-sync client를 선택하고, 원격 policy
+server의 내부 모델은 OpenPI π0를 사용한다.
 
 ## 바뀌는 것과 유지되는 것
 
 - 새 서버: LeRobot `transport.AsyncInference` gRPC 네 RPC를 그대로 제공한다.
 - 새 서버: YAML이 고른 Orbax checkpoint와 내장 norm stats만 사용한다.
-- 기존 client: observation 수집, action queue, chunk aggregation, 20 Hz 실행은 그대로다.
+- async client: 기존 observation queue, chunk aggregation, 20 Hz 실행을 그대로 사용한다.
+- sync client: 관측·추론 대기·chunk 실행을 한 thread에서 순서대로 수행한다.
 - 기존 ROS 경로: `/piper/inference/output` publisher와 rosbridge 코드는 바꾸지 않는다.
 
 client의 `--pretrained_name_or_path`는 gRPC 호환상 필수지만 서버의 모델 경로로
@@ -64,11 +66,17 @@ cd /home/pc/vla_ws
   --config config/inference/pi0_piper_vla_pipeline.yaml
 ```
 
-`async_client.episode_time_seconds: 35`는 control loop 시작 후 35초에 client를 정상
+`client.episode_time_seconds: 35`는 control loop 시작 후 35초에 client를 정상
 종료한다. `null`로 바꾸면 launcher가 `PIPER_EPISODE_TIME_S`를 빈 값으로 강제해 이전
-shell 설정과 관계없이 무제한으로 실행한다. launcher는 `lerobot-060` Python으로 자동
-전환하고 기존 `/home/pc/vla_pipeline/piper_bridge/async_client.py`의 검증된 제어 루프를
-호출한다. 따라서 `lerobot` shell 함수나 긴 client 인자를 직접 입력하지 않는다.
+shell 설정과 관계없이 무제한으로 실행한다. `mode: async`에서는 기존
+`/home/pc/vla_pipeline/piper_bridge/async_client.py`, `mode: sync`에서는
+`piper_vla.inference.sync_client`를 실행한다. launcher가 `lerobot-060` Python으로 자동
+전환하므로 `lerobot` shell 함수나 긴 client 인자를 직접 입력하지 않는다.
+
+`client.async_options`의 threshold·aggregation·queue 시각화는 `mode: sync`일 때 전부
+무시된다. sync client는 action queue를 합성하지 않으며 한 chunk를 모두 실행한 후에만
+다음 관측을 보낸다. 상세 설정표는
+[`config/inference/README.md`](../../config/inference/README.md)에 있다.
 
 서버와 client에서 일회성 `--step N` 또는 `--latest`를 사용할 때는 반드시 양쪽에 같은
 옵션을 준다. 보통은 두 명령 모두 옵션 없이 실행해 YAML의 `checkpoint.step`을 공유한다.

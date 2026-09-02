@@ -28,20 +28,27 @@ def _load_launcher() -> object:
     return module
 
 
-def _settings(*, episode_time_seconds: float | None) -> SimpleNamespace:
+def _settings(
+    *,
+    episode_time_seconds: float | None,
+    mode: str = "async",
+) -> SimpleNamespace:
     """launcher argument와 environment를 검사할 최소 설정을 만든다."""
 
     return SimpleNamespace(
         checkpoint=SimpleNamespace(run_name="test_run"),
         policy=SimpleNamespace(prompt="pick up the green block"),
         server=SimpleNamespace(host="0.0.0.0", port=8080),
-        async_client=SimpleNamespace(
+        client=SimpleNamespace(
+            mode=mode,
             episode_time_seconds=episode_time_seconds,
             actions_per_chunk=50,
-            chunk_size_threshold=0.75,
-            aggregate_fn_name="weighted_average",
             fps=20,
-            debug_visualize_queue_size=True,
+            async_options=SimpleNamespace(
+                chunk_size_threshold=0.75,
+                aggregate_fn_name="weighted_average",
+                debug_visualize_queue_size=True,
+            ),
         ),
     )
 
@@ -89,6 +96,24 @@ class VlaPipelineClientLauncherTest(unittest.TestCase):
         """IPv6 wildcard bind도 같은 PC에서 접속 가능한 주소가 돼야 한다."""
 
         self.assertEqual(self.launcher._server_address("::", 8080), "[::1]:8080")
+
+    def test_sync_arguments_ignore_all_async_options(self) -> None:
+        """sync 명령에는 queue threshold·aggregation·queue 시각화가 없어야 한다."""
+
+        settings = _settings(episode_time_seconds=35.0, mode="sync")
+        arguments = self.launcher.build_client_arguments(settings, checkpoint_step=30000)
+        command = " ".join(arguments)
+        self.assertEqual(arguments[1:3], ["-m", "piper_vla.inference.sync_client"])
+        self.assertIn("--episode-time-seconds=35", arguments)
+        self.assertNotIn("chunk_size_threshold", command)
+        self.assertNotIn("aggregate_fn_name", command)
+        self.assertNotIn("debug_visualize_queue_size", command)
+
+        environment = self.launcher.build_client_environment(
+            settings,
+            {"PIPER_EPISODE_TIME_S": "999"},
+        )
+        self.assertEqual(environment["PIPER_EPISODE_TIME_S"], "")
 
 
 if __name__ == "__main__":

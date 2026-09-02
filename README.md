@@ -47,8 +47,8 @@ config/
 ```
 
 두 명령 모두 YAML의 checkpoint step을 먼저 검증한다. client launcher는 `lerobot-060`
-Python을 자동으로 사용하며 YAML의 실행 시간, prompt, 서버 주소, chunk와 FPS 값을 기존
-`piper_bridge.async_client`에 적용한다.
+Python을 자동으로 사용하며 `client.mode`에 따라 기존 비동기 client 또는 vla_ws 동기
+client를 선택한다. 실행 시간, prompt, 서버 주소, chunk와 FPS도 같은 YAML에서 적용한다.
 
 실행·원격 client 주소 설정은
 [`docs/inference/VLA_PIPELINE_SERVER.md`](./docs/inference/VLA_PIPELINE_SERVER.md)에 있다.

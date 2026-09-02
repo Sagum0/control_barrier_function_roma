@@ -1,4 +1,4 @@
-schema_version: 3
+schema_version: 4
 
 checkpoint:
   runs_root: data/runs
@@ -19,12 +19,16 @@ server:
 runtime:
   jax_memory_fraction: 0.70
 
-async_client:
+client:
+  # async: 추론과 action 실행을 중첩, sync: 한 chunk 추론 완료 후 순차 실행.
+  mode: sync
   # control loop 시작 후 자동 종료 시간(초). null이면 무제한 실행.
   episode_time_seconds: 35
   actions_per_chunk: 50
-  chunk_size_threshold: 0.5
-  aggregate_fn_name: weighted_average
   fps: 20
   observation_queue_timeout_seconds: 1.0
-  debug_visualize_queue_size: false
+  # mode가 sync이면 아래 세 값은 검증만 하고 client 동작에는 사용하지 않는다.
+  async_options:
+    chunk_size_threshold: 0.5
+    aggregate_fn_name: weighted_average
+    debug_visualize_queue_size: false
