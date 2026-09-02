@@ -23,21 +23,19 @@ cd /home/pc/vla_ws
 
 ./scripts/inference/serve_vla_pipeline.py \
   --config config/inference/pi0_piper_vla_pipeline.yaml \
-  --step 30000 \
   --check-only
 ```
 
-## 같은 설정의 client 명령 확인
+## 같은 설정의 client 점검
 
 ```bash
-./scripts/inference/serve_vla_pipeline.py \
+./scripts/inference/run_vla_pipeline_client.py \
   --config config/inference/pi0_piper_vla_pipeline.yaml \
-  --step 30000 \
-  --print-client-command
+  --print-command
 ```
 
-이 명령은 GPU를 초기화하지 않는다. 출력된 명령의 `/path/to/vla_pipeline`과
-`GPU_SERVER_IP`를 Piper PC의 실제 값으로 바꿔 실행한다.
+이 명령은 로봇 제어 client를 시작하지 않고 checkpoint 존재 여부와 실제 적용될 YAML 값,
+`PIPER_EPISODE_TIME_S`, 내부 client 명령만 출력한다.
 
 ## 서버 실행
 
@@ -45,9 +43,12 @@ cd /home/pc/vla_ws
 cd /home/pc/vla_ws
 
 ./scripts/inference/serve_vla_pipeline.py \
-  --config config/inference/pi0_piper_vla_pipeline.yaml \
-  --step 30000
+  --config config/inference/pi0_piper_vla_pipeline.yaml
 ```
+
+위 세 명령은 YAML의 `checkpoint.step`을 사용한다. 선택한 step의 완료 checkpoint가 없거나
+필수 params·norm stats 검증에 실패하면 서버는 다른 step으로 대체하지 않고 종료한다.
+일회성으로만 다른 step을 시험할 때는 `--step N`으로 YAML 값을 덮어쓸 수 있다.
 
 기본 endpoint는 `127.0.0.1:8080`이다. client가 다른 PC에 있다면 YAML의 `host`를
 `0.0.0.0` 또는 GPU 서버의 신뢰된 LAN 주소로 바꾸고, client의 `--server_address`에는
@@ -57,19 +58,20 @@ cd /home/pc/vla_ws
 ## 기존 client 실행 형태
 
 ```bash
-PYTHONPATH=/path/to/vla_pipeline python -m piper_bridge.async_client \
-  --server_address=GPU_SERVER_IP:8080 \
-  --robot.type=piper_bridge \
-  --policy_type=pi0 \
-  --pretrained_name_or_path=two_block_pnp_b32_vt_s30000_r002/30000 \
-  --task="pick up the green blocks one at a time and place them in the white box" \
-  --policy_device=cuda \
-  --client_device=cpu \
-  --actions_per_chunk=50 \
-  --chunk_size_threshold=0.5 \
-  --aggregate_fn_name=weighted_average \
-  --fps=20
+cd /home/pc/vla_ws
+
+./scripts/inference/run_vla_pipeline_client.py \
+  --config config/inference/pi0_piper_vla_pipeline.yaml
 ```
+
+`async_client.episode_time_seconds: 35`는 control loop 시작 후 35초에 client를 정상
+종료한다. `null`로 바꾸면 launcher가 `PIPER_EPISODE_TIME_S`를 빈 값으로 강제해 이전
+shell 설정과 관계없이 무제한으로 실행한다. launcher는 `lerobot-060` Python으로 자동
+전환하고 기존 `/home/pc/vla_pipeline/piper_bridge/async_client.py`의 검증된 제어 루프를
+호출한다. 따라서 `lerobot` shell 함수나 긴 client 인자를 직접 입력하지 않는다.
+
+서버와 client에서 일회성 `--step N` 또는 `--latest`를 사용할 때는 반드시 양쪽에 같은
+옵션을 준다. 보통은 두 명령 모두 옵션 없이 실행해 YAML의 `checkpoint.step`을 공유한다.
 
 서버는 client의 raw key `joint_1.pos`~`joint_6.pos`, `gripper.pos`, `wrist`,
 `third_person`, `task`를 검증해 OpenPI canonical observation으로 바꾼다. 응답은

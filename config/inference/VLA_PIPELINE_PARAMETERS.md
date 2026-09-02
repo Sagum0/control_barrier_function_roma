@@ -19,6 +19,7 @@ policy:
   num_inference_steps: 10
 
 async_client:
+  episode_time_seconds: 35
   actions_per_chunk: 50
   chunk_size_threshold: 0.50
   aggregate_fn_name: weighted_average
@@ -46,6 +47,7 @@ client에 action 50개 전송
 | 구분 | 설정 | 실제 적용 위치 |
 |---|---|---|
 | 모델 | `num_inference_steps` | π0 GPU 추론 |
+| client | `episode_time_seconds` | control loop 시작 후 자동 종료 타이머 |
 | 서버 | `actions_per_chunk` | server가 client 요청값과 일치하는지 강제 |
 | 서버 | `fps` | action timestamp 간격 계산 |
 | 서버 | `observation_queue_timeout_seconds` | observation 대기 시간 |
@@ -54,17 +56,16 @@ client에 action 50개 전송
 | client | `debug_visualize_queue_size` | Piper PC 진단 화면 |
 
 현재 LeRobot 0.6 handshake는 `actions_per_chunk`만 서버에 전달한다.
-따라서 threshold와 합성 방식은 서버가 원격으로 강제할 수 없다. 대신 서버 launcher가
-같은 YAML 값으로 client 실행 명령을 만들어 준다.
+따라서 threshold와 합성 방식은 서버가 원격으로 강제할 수 없다. 대신 vla_ws client
+launcher가 같은 YAML을 읽어 기존 client에 값을 직접 전달한다.
 
 ```bash
-./scripts/inference/serve_vla_pipeline.py \
+./scripts/inference/run_vla_pipeline_client.py \
   --config config/inference/pi0_piper_vla_pipeline.yaml \
-  --step 30000 \
-  --print-client-command
+  --print-command
 ```
 
-출력된 명령을 Piper PC에서 실행해야 같은 설정이 적용된다.
+점검 후 `--print-command`를 빼고 실행하면 같은 설정이 적용된다.
 
 ## `checkpoint`: 어떤 모델을 불러오는가
 
@@ -127,6 +128,9 @@ step: 30000
 실험 기록을 재현하려면 `latest`보다 숫자를 고정하는 것이 안전하다. Orbax 임시 저장
 폴더나 commit이 끝나지 않은 step은 선택되지 않는다.
 
+`--step`을 생략하면 이 YAML 값을 그대로 사용한다. 해당 숫자의 완료 checkpoint가 없거나
+필수 params·norm stats가 손상됐으면 최신 또는 다른 step으로 대체하지 않고 서버가 종료한다.
+
 ## `policy`: π0가 action을 계산하는 방법
 
 ### `prompt`
@@ -186,6 +190,28 @@ jax_memory_fraction: 0.70
 날 수 있고, 너무 높으면 같은 GPU의 다른 process가 사용할 공간이 줄어든다.
 
 ## `async_client`: 비동기 chunk 실행
+
+### `episode_time_seconds`
+
+control loop가 시작된 뒤 자동으로 종료할 시간을 초 단위로 지정한다.
+
+```yaml
+episode_time_seconds: 35
+```
+
+위 설정은 35초 뒤 기존 `vla_pipeline` client의 `shutdown_event`를 설정하므로 action 발행,
+ROS 연결 및 세션 로그가 정상 종료 절차를 밟는다. 서버 시작이나 모델 weight 로딩 시간은
+35초에 포함하지 않는다.
+
+무제한으로 실행하려면 `null`을 사용한다.
+
+```yaml
+episode_time_seconds: null
+```
+
+생성된 client 명령은 제한 모드에서 `PIPER_EPISODE_TIME_S=35`, 무제한 모드에서
+`PIPER_EPISODE_TIME_S=`를 명시해 이전 shell에 남은 환경변수까지 덮어쓴다. 숫자는 유한한
+양수만 허용한다.
 
 ### `actions_per_chunk`
 
@@ -271,13 +297,12 @@ debug_visualize_queue_size: true
 
 ## 실행 순서
 
-1. 설정과 생성될 client 명령을 확인한다.
+1. 설정과 client에 적용될 값을 확인한다.
 
 ```bash
-./scripts/inference/serve_vla_pipeline.py \
+./scripts/inference/run_vla_pipeline_client.py \
   --config config/inference/pi0_piper_vla_pipeline.yaml \
-  --step 30000 \
-  --print-client-command
+  --print-command
 ```
 
 2. checkpoint를 GPU 없이 검사한다.
@@ -285,7 +310,6 @@ debug_visualize_queue_size: true
 ```bash
 ./scripts/inference/serve_vla_pipeline.py \
   --config config/inference/pi0_piper_vla_pipeline.yaml \
-  --step 30000 \
   --check-only
 ```
 
@@ -293,12 +317,18 @@ debug_visualize_queue_size: true
 
 ```bash
 ./scripts/inference/serve_vla_pipeline.py \
-  --config config/inference/pi0_piper_vla_pipeline.yaml \
-  --step 30000
+  --config config/inference/pi0_piper_vla_pipeline.yaml
 ```
 
-4. 첫 명령에서 출력된 client 명령의 `/path/to/vla_pipeline`과 `GPU_SERVER_IP`를
-Piper PC의 실제 값으로 바꿔 실행한다.
+4. 다른 terminal에서 YAML 기반 client를 실행한다.
+
+```bash
+./scripts/inference/run_vla_pipeline_client.py \
+  --config config/inference/pi0_piper_vla_pipeline.yaml
+```
+
+launcher가 `lerobot-060` 환경과 기존 `/home/pc/vla_pipeline/piper_bridge.async_client`를
+자동으로 사용한다. 수동 client 명령은 함께 실행하지 않는다.
 
 ## 비교 실험 원칙
 

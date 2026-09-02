@@ -15,10 +15,10 @@ TEST_PROMPT = "pick up the green blocks one at a time and place them in the whit
 
 
 def _config_text() -> str:
-    """schema 2의 최소 유효 설정을 반환한다."""
+    """현재 schema 3의 최소 유효 설정을 반환한다."""
 
     return (
-        "schema_version: 2\n"
+        "schema_version: 3\n"
         "checkpoint:\n"
         "  runs_root: data/runs\n"
         "  config_name: pi0_piper_lora\n"
@@ -34,6 +34,7 @@ def _config_text() -> str:
         "runtime:\n"
         "  jax_memory_fraction: 0.7\n"
         "async_client:\n"
+        "  episode_time_seconds: 35\n"
         "  actions_per_chunk: 50\n"
         "  chunk_size_threshold: 0.5\n"
         "  aggregate_fn_name: weighted_average\n"
@@ -57,13 +58,14 @@ class AsyncClientSettingsTest(unittest.TestCase):
         config_path.write_text(text, encoding="utf-8")
         return load_pi0_inference_settings(config_path, workspace)
 
-    def test_schema2_values_and_client_command(self) -> None:
+    def test_schema3_values_and_client_command(self) -> None:
         """YAML 값이 typed 설정과 client CLI에 그대로 반영돼야 한다."""
 
         settings = self._load(_config_text())
         self.assertIsNotNone(settings.async_client)
         async_client = settings.async_client
         assert async_client is not None
+        self.assertEqual(async_client.episode_time_seconds, 35.0)
         self.assertEqual(async_client.actions_per_chunk, 50)
         self.assertEqual(async_client.chunk_size_threshold, 0.5)
         self.assertEqual(async_client.aggregate_fn_name, "weighted_average")
@@ -74,6 +76,7 @@ class AsyncClientSettingsTest(unittest.TestCase):
             requested_step=30000,
         )
         self.assertIn("--server_address=GPU_SERVER_IP:8080", command)
+        self.assertIn("PIPER_EPISODE_TIME_S=35", command)
         self.assertIn("--actions_per_chunk=50", command)
         self.assertIn("--chunk_size_threshold=0.5", command)
         self.assertIn("--aggregate_fn_name=weighted_average", command)
@@ -93,6 +96,43 @@ class AsyncClientSettingsTest(unittest.TestCase):
             self._load(_config_text().replace("actions_per_chunk: 50", "actions_per_chunk: 51"))
         with self.assertRaisesRegex(TypeError, "actions_per_chunk"):
             self._load(_config_text().replace("actions_per_chunk: 50", "actions_per_chunk: true"))
+        with self.assertRaisesRegex(ValueError, "episode_time_seconds"):
+            self._load(
+                _config_text().replace(
+                    "episode_time_seconds: 35",
+                    "episode_time_seconds: 0",
+                )
+            )
+
+    def test_null_episode_time_generates_explicit_unlimited_command(self) -> None:
+        """null은 상속된 시간 제한 환경변수도 지우는 무제한 명령이어야 한다."""
+
+        settings = self._load(
+            _config_text().replace(
+                "episode_time_seconds: 35",
+                "episode_time_seconds: null",
+            )
+        )
+        async_client = settings.async_client
+        assert async_client is not None
+        self.assertIsNone(async_client.episode_time_seconds)
+        command = build_vla_pipeline_client_command(
+            settings,
+            requested_step=settings.checkpoint.step,
+        )
+        self.assertIn("PIPER_EPISODE_TIME_S= PYTHONPATH=", command)
+
+    def test_schema2_remains_unlimited_for_compatibility(self) -> None:
+        """기존 schema 2 설정은 시간 제한이 없던 동작을 유지해야 한다."""
+
+        settings = self._load(
+            _config_text()
+            .replace("schema_version: 3", "schema_version: 2")
+            .replace("  episode_time_seconds: 35\n", "")
+        )
+        async_client = settings.async_client
+        assert async_client is not None
+        self.assertIsNone(async_client.episode_time_seconds)
 
 
 if __name__ == "__main__":

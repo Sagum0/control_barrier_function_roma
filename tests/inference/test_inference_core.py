@@ -150,6 +150,19 @@ class InferenceCoreTest(unittest.TestCase):
             self.assertEqual(selected.step, 10)
             self.assertEqual(len(selected.norm_stats_sha256), 64)
 
+    def test_missing_yaml_checkpoint_step_fails_without_fallback(self) -> None:
+        """YAML이 고른 step이 없으면 다른 checkpoint로 대체하지 않고 종료해야 한다."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary).resolve()
+            settings = load_pi0_inference_settings(
+                self._write_config(workspace),
+                workspace,
+            )
+            self._make_checkpoint(workspace, 5)
+            with self.assertRaisesRegex(FileNotFoundError, "checkpoint"):
+                select_checkpoint(settings)
+
     def test_observation_and_policy_output_contract(self) -> None:
         """canonical 관측과 `(50, 7)` action이 dtype·shape를 보존해야 한다."""
 

@@ -33,6 +33,21 @@ def validate_async_client_values(
 ) -> dict[str, Any]:
     """strict-load된 async_client mapping을 dataclass 생성용 값으로 바꾼다."""
 
+    episode_time_raw = raw["episode_time_seconds"]
+    episode_time_seconds: float | None
+    if episode_time_raw is None:
+        episode_time_seconds = None
+    else:
+        episode_time_seconds = _require_real(
+            episode_time_raw,
+            field_name="async_client.episode_time_seconds",
+        )
+        if episode_time_seconds <= 0.0:
+            raise ValueError(
+                "async_client.episode_time_seconds는 양수 또는 null이어야 합니다: "
+                f"{episode_time_seconds}"
+            )
+
     actions_per_chunk = _require_integer(
         raw["actions_per_chunk"],
         field_name="async_client.actions_per_chunk",
@@ -87,6 +102,7 @@ def validate_async_client_values(
         )
 
     return {
+        "episode_time_seconds": episode_time_seconds,
         "actions_per_chunk": actions_per_chunk,
         "chunk_size_threshold": chunk_size_threshold,
         "aggregate_fn_name": aggregate_fn_name,

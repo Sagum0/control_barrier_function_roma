@@ -13,12 +13,12 @@
 |---|---|---|
 | 주 용도 | 새로 만드는 범용 adapter | 기존 `vla_pipeline` 연동 |
 | 통신 방식 | OpenPI WebSocket | LeRobot 0.6 AsyncInference gRPC |
-| 실행 파일 | `scripts/inference/serve_policy.py` | `scripts/inference/serve_vla_pipeline.py` |
+| 실행 파일 | `scripts/inference/serve_policy.py` | server: `scripts/inference/serve_vla_pipeline.py`<br>client: `scripts/inference/run_vla_pipeline_client.py` |
 | 기본 포트 | `8000` | `8080` |
 | 입력 방식 | RGB 영상 2개, 7D state, prompt를 직접 전송 | LeRobot feature handshake와 observation queue 사용 |
 | 출력 방식 | `(50, 7)` absolute action 배열 | timestamp가 포함된 `TimedAction` chunk |
-| 비동기 chunk 설정 | 없음 | chunk 크기, 교체 시점, 집계 방식, FPS 설정 가능 |
-| YAML schema | `1` | `2` |
+| 비동기 chunk 설정 | 없음 | 실행 시간, chunk 크기, 교체 시점, 집계 방식, FPS 설정 가능 |
+| YAML schema | `1` | `3` |
 
 두 YAML의 다음 항목은 의미가 같다.
 
@@ -36,18 +36,21 @@
 
 ```bash
 ./scripts/inference/serve_vla_pipeline.py \
-  --config config/inference/pi0_piper_vla_pipeline.yaml \
-  --step 30000
+  --config config/inference/pi0_piper_vla_pipeline.yaml
 ```
 
-같은 YAML을 반영한 Piper PC client 명령은 다음과 같이 생성한다.
+다른 terminal에서 같은 YAML을 반영한 Piper client를 실행한다.
 
 ```bash
-./scripts/inference/serve_vla_pipeline.py \
-  --config config/inference/pi0_piper_vla_pipeline.yaml \
-  --step 30000 \
-  --print-client-command
+./scripts/inference/run_vla_pipeline_client.py \
+  --config config/inference/pi0_piper_vla_pipeline.yaml
 ```
+
+서버와 client는 YAML의 `checkpoint.step`을 사용한다. `--step`을 주면 그 실행에 한해 YAML
+값을 덮어쓴다. 선택한 step의 완료 checkpoint가 없거나 손상됐으면 다른 step으로 대체하지
+않고 해당 process가 즉시 종료한다. client launcher가 `lerobot-060`, `PYTHONPATH`,
+`PIPER_EPISODE_TIME_S`를 자동 설정하므로 긴 `python -m piper_bridge.async_client ...`
+명령을 별도로 실행하지 않는다.
 
 ### 새 WebSocket adapter를 사용할 때
 

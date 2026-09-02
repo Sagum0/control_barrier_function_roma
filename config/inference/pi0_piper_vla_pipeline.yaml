@@ -1,10 +1,11 @@
-schema_version: 2
+schema_version: 3
 
 checkpoint:
   runs_root: data/runs
   config_name: pi0_piper_lora
   run_name: two_block_pnp_b32_vt_s30000_r002
   asset_id: two_block_pnp
+  # 실행할 정확한 checkpoint step. 해당 완료 checkpoint가 없으면 서버가 종료된다.
   step: 30000
 
 policy:
@@ -19,9 +20,11 @@ runtime:
   jax_memory_fraction: 0.70
 
 async_client:
+  # control loop 시작 후 자동 종료 시간(초). null이면 무제한 실행.
+  episode_time_seconds: 35
   actions_per_chunk: 50
-  chunk_size_threshold: 0.50
+  chunk_size_threshold: 0.5
   aggregate_fn_name: weighted_average
   fps: 20
   observation_queue_timeout_seconds: 1.0
-  debug_visualize_queue_size: true
+  debug_visualize_queue_size: false

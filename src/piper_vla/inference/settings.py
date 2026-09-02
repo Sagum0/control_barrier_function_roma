@@ -17,8 +17,11 @@ from piper_vla.inference.async_client_settings import (
 # 기본 WebSocket 설정이 사용하는 이전 추론 schema다.
 LEGACY_INFERENCE_SCHEMA_VERSION = 1
 
-# async client 계약까지 포함하는 현재 추론 schema다.
-INFERENCE_SCHEMA_VERSION = 2
+# 시간 제한이 없던 기존 async client schema다.
+LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION = 2
+
+# episode 시간 제한까지 포함하는 현재 추론 schema다.
+INFERENCE_SCHEMA_VERSION = 3
 
 # 학습과 동일하게 사용하는 OpenPI config namespace다.
 PIPER_PI0_CONFIG_NAME = "pi0_piper_lora"
@@ -31,7 +34,7 @@ LEGACY_TOP_LEVEL_KEYS = frozenset(
     {"schema_version", "checkpoint", "policy", "server", "runtime"}
 )
 
-# schema 2 설정 파일 최상위에서 허용하는 key다.
+# async client 설정 파일 최상위에서 허용하는 key다.
 TOP_LEVEL_KEYS = frozenset(
     {
         "schema_version",
@@ -55,8 +58,8 @@ SERVER_KEYS = frozenset({"host", "port"})
 # runtime section에서 허용하는 key다.
 RUNTIME_KEYS = frozenset({"jax_memory_fraction"})
 
-# async_client section에서 허용하는 key다.
-ASYNC_CLIENT_KEYS = frozenset(
+# schema 2 async_client section에서 허용하던 key다.
+LEGACY_ASYNC_CLIENT_KEYS = frozenset(
     {
         "actions_per_chunk",
         "chunk_size_threshold",
@@ -66,6 +69,9 @@ ASYNC_CLIENT_KEYS = frozenset(
         "debug_visualize_queue_size",
     }
 )
+
+# schema 3 async_client section에서 허용하는 key다.
+ASYNC_CLIENT_KEYS = LEGACY_ASYNC_CLIENT_KEYS | {"episode_time_seconds"}
 
 # LeRobot 0.6 async client가 제공하는 chunk 합성 함수다.
 ASYNC_AGGREGATE_FUNCTIONS = frozenset(
@@ -163,6 +169,9 @@ class InferenceRuntimeSettings:
 class AsyncClientSettings:
     """LeRobot async client와 gRPC server가 공유하는 실행 계약이다."""
 
+    # control loop 시작 후 자동 종료할 시간이다. None이면 무제한으로 실행한다.
+    episode_time_seconds: float | None
+
     # π0가 생성한 50개 action 중 client에 보낼 개수다.
     actions_per_chunk: int
 
@@ -204,7 +213,7 @@ class Pi0InferenceSettings:
     # JAX process 자원 설정이다.
     runtime: InferenceRuntimeSettings
 
-    # schema 2에서만 제공하는 LeRobot async 실행 계약이다.
+    # async schema에서 제공하는 LeRobot 실행 계약이다.
     async_client: AsyncClientSettings | None
 
 
@@ -311,12 +320,16 @@ def load_pi0_inference_settings(
     schema_version = _require_integer(root["schema_version"], field_name="schema_version")
     if schema_version == LEGACY_INFERENCE_SCHEMA_VERSION:
         _require_exact_keys(root, LEGACY_TOP_LEVEL_KEYS, field_name="config")
-    elif schema_version == INFERENCE_SCHEMA_VERSION:
+    elif schema_version in {
+        LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION,
+        INFERENCE_SCHEMA_VERSION,
+    }:
         _require_exact_keys(root, TOP_LEVEL_KEYS, field_name="config")
     else:
         raise ValueError(
             f"지원하지 않는 추론 schema입니다: "
             f"expected={LEGACY_INFERENCE_SCHEMA_VERSION} 또는 "
+            f"{LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION} 또는 "
             f"{INFERENCE_SCHEMA_VERSION}, actual={schema_version}"
         )
 
@@ -330,16 +343,24 @@ def load_pi0_inference_settings(
     _require_exact_keys(runtime_raw, RUNTIME_KEYS, field_name="runtime")
 
     async_client_raw: dict[str, Any] | None = None
-    if schema_version == INFERENCE_SCHEMA_VERSION:
+    if schema_version in {
+        LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION,
+        INFERENCE_SCHEMA_VERSION,
+    }:
         async_client_raw = _require_mapping(
             root["async_client"],
             field_name="async_client",
         )
         _require_exact_keys(
             async_client_raw,
-            ASYNC_CLIENT_KEYS,
+            LEGACY_ASYNC_CLIENT_KEYS
+            if schema_version == LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION
+            else ASYNC_CLIENT_KEYS,
             field_name="async_client",
         )
+        if schema_version == LEGACY_ASYNC_INFERENCE_SCHEMA_VERSION:
+            async_client_raw = dict(async_client_raw)
+            async_client_raw["episode_time_seconds"] = None
 
     config_name = _validate_safe_name(
         _require_string(checkpoint_raw["config_name"], field_name="checkpoint.config_name"),

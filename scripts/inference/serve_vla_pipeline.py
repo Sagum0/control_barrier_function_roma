@@ -117,7 +117,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     settings = load_pi0_inference_settings(namespace.config, WORKSPACE_ROOT)
     async_client = settings.async_client
     if async_client is None:
-        parser.error("vla_pipeline server config에는 schema 2 async_client가 필요합니다.")
+        parser.error("vla_pipeline server config에는 async_client 설정이 필요합니다.")
     requested_step: int | str = "latest" if namespace.latest else (
         settings.checkpoint.step if namespace.step is None else namespace.step
     )
@@ -130,6 +130,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("Transport          : LeRobot 0.6 AsyncInference gRPC")
     print("Server             :", f"{settings.server.host}:{settings.server.port}")
     print("JAX memory fraction:", settings.runtime.jax_memory_fraction)
+    print(
+        "Episode time       :",
+        "unlimited"
+        if async_client.episode_time_seconds is None
+        else f"{async_client.episode_time_seconds:g}s",
+    )
     print("Actions per chunk  :", async_client.actions_per_chunk)
     print("Queue threshold    :", async_client.chunk_size_threshold)
     print("Aggregate function :", async_client.aggregate_fn_name)

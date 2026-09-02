@@ -771,7 +771,7 @@ def create_lerobot_grpc_server(
     async_client = getattr(settings, "async_client", None)
     if async_client is None:
         raise ValueError(
-            "vla_pipeline gRPC server에는 schema 2 async_client 설정이 필요합니다."
+            "vla_pipeline gRPC server에는 async_client 설정이 필요합니다."
         )
     service = LeRobotGrpcPolicyService(
         policy,

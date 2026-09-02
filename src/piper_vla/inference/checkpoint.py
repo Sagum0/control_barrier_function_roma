@@ -163,6 +163,8 @@ def inspect_committed_checkpoint(
 
     if step_dir.is_symlink():
         raise ValueError(f"checkpoint step symlink는 허용하지 않습니다: {step_dir}")
+    if not step_dir.exists():
+        raise FileNotFoundError(f"checkpoint step 디렉터리가 없습니다: {step_dir}")
     if not step_dir.is_dir() or not step_dir.name.isdecimal():
         raise ValueError(f"checkpoint는 숫자 step 디렉터리여야 합니다: {step_dir}")
     canonical_step_dir = step_dir.resolve()

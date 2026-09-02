@@ -34,14 +34,21 @@ config/
   --check-only
 ```
 
-## 기존 vla_pipeline용 gRPC 서버
+## 기존 vla_pipeline용 gRPC 서버·client
 
 ```bash
+# terminal: model server
 ./scripts/inference/serve_vla_pipeline.py \
-  --config config/inference/pi0_piper_vla_pipeline.yaml \
-  --step 30000 \
-  --check-only
+  --config config/inference/pi0_piper_vla_pipeline.yaml
+
+# terminal: robot client
+./scripts/inference/run_vla_pipeline_client.py \
+  --config config/inference/pi0_piper_vla_pipeline.yaml
 ```
+
+두 명령 모두 YAML의 checkpoint step을 먼저 검증한다. client launcher는 `lerobot-060`
+Python을 자동으로 사용하며 YAML의 실행 시간, prompt, 서버 주소, chunk와 FPS 값을 기존
+`piper_bridge.async_client`에 적용한다.
 
 실행·원격 client 주소 설정은
 [`docs/inference/VLA_PIPELINE_SERVER.md`](./docs/inference/VLA_PIPELINE_SERVER.md)에 있다.
