@@ -10,9 +10,15 @@ from typing import Any
 
 import yaml
 
+from piper_vla.inference.async_client_settings import (
+    validate_async_client_values,
+)
 
-# 현재 추론 설정 파일 형식의 버전이다.
-INFERENCE_SCHEMA_VERSION = 1
+# 기본 WebSocket 설정이 사용하는 이전 추론 schema다.
+LEGACY_INFERENCE_SCHEMA_VERSION = 1
+
+# async client 계약까지 포함하는 현재 추론 schema다.
+INFERENCE_SCHEMA_VERSION = 2
 
 # 학습과 동일하게 사용하는 OpenPI config namespace다.
 PIPER_PI0_CONFIG_NAME = "pi0_piper_lora"
@@ -20,8 +26,22 @@ PIPER_PI0_CONFIG_NAME = "pi0_piper_lora"
 # 경로 구성 요소로 안전하게 사용할 수 있는 이름 형식이다.
 SAFE_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
-# 설정 파일 최상위에서 허용하는 key다.
-TOP_LEVEL_KEYS = frozenset({"schema_version", "checkpoint", "policy", "server", "runtime"})
+# schema 1 설정 파일 최상위에서 허용하는 key다.
+LEGACY_TOP_LEVEL_KEYS = frozenset(
+    {"schema_version", "checkpoint", "policy", "server", "runtime"}
+)
+
+# schema 2 설정 파일 최상위에서 허용하는 key다.
+TOP_LEVEL_KEYS = frozenset(
+    {
+        "schema_version",
+        "checkpoint",
+        "policy",
+        "server",
+        "runtime",
+        "async_client",
+    }
+)
 
 # checkpoint section에서 허용하는 key다.
 CHECKPOINT_KEYS = frozenset({"runs_root", "config_name", "run_name", "asset_id", "step"})
@@ -34,6 +54,26 @@ SERVER_KEYS = frozenset({"host", "port"})
 
 # runtime section에서 허용하는 key다.
 RUNTIME_KEYS = frozenset({"jax_memory_fraction"})
+
+# async_client section에서 허용하는 key다.
+ASYNC_CLIENT_KEYS = frozenset(
+    {
+        "actions_per_chunk",
+        "chunk_size_threshold",
+        "aggregate_fn_name",
+        "fps",
+        "observation_queue_timeout_seconds",
+        "debug_visualize_queue_size",
+    }
+)
+
+# LeRobot 0.6 async client가 제공하는 chunk 합성 함수다.
+ASYNC_AGGREGATE_FUNCTIONS = frozenset(
+    {"weighted_average", "latest_only", "average", "conservative"}
+)
+
+# 현재 Piper π0 checkpoint가 생성하는 최대 action chunk 길이다.
+PI0_ACTION_HORIZON = 50
 
 # 추론 JAX allocator에 허용하는 최소 GPU 메모리 비율이다.
 MIN_JAX_MEMORY_FRACTION = 0.30
@@ -120,6 +160,29 @@ class InferenceRuntimeSettings:
 
 
 @dataclasses.dataclass(frozen=True)
+class AsyncClientSettings:
+    """LeRobot async client와 gRPC server가 공유하는 실행 계약이다."""
+
+    # π0가 생성한 50개 action 중 client에 보낼 개수다.
+    actions_per_chunk: int
+
+    # client queue가 이 비율 이하로 남으면 새 관측을 보내는 기준이다.
+    chunk_size_threshold: float
+
+    # 겹치는 이전·신규 action을 client에서 합치는 함수 이름이다.
+    aggregate_fn_name: str
+
+    # action을 실행하고 timestamp를 만드는 제어 주파수다.
+    fps: int
+
+    # 서버가 새 observation을 기다리는 최대 시간이다.
+    observation_queue_timeout_seconds: float
+
+    # client queue 크기 진단 창을 표시할지 정하는 값이다.
+    debug_visualize_queue_size: bool
+
+
+@dataclasses.dataclass(frozen=True)
 class Pi0InferenceSettings:
     """검증과 경로 해석을 마친 전체 Piper π0 추론 설정이다."""
 
@@ -140,6 +203,9 @@ class Pi0InferenceSettings:
 
     # JAX process 자원 설정이다.
     runtime: InferenceRuntimeSettings
+
+    # schema 2에서만 제공하는 LeRobot async 실행 계약이다.
+    async_client: AsyncClientSettings | None
 
 
 def _require_mapping(value: Any, *, field_name: str) -> dict[str, Any]:
@@ -242,13 +308,16 @@ def load_pi0_inference_settings(
 
     raw = yaml.load(resolved_config.read_text(encoding="utf-8"), Loader=UniqueKeySafeLoader)
     root = _require_mapping(raw, field_name="config")
-    _require_exact_keys(root, TOP_LEVEL_KEYS, field_name="config")
-
     schema_version = _require_integer(root["schema_version"], field_name="schema_version")
-    if schema_version != INFERENCE_SCHEMA_VERSION:
+    if schema_version == LEGACY_INFERENCE_SCHEMA_VERSION:
+        _require_exact_keys(root, LEGACY_TOP_LEVEL_KEYS, field_name="config")
+    elif schema_version == INFERENCE_SCHEMA_VERSION:
+        _require_exact_keys(root, TOP_LEVEL_KEYS, field_name="config")
+    else:
         raise ValueError(
             f"지원하지 않는 추론 schema입니다: "
-            f"expected={INFERENCE_SCHEMA_VERSION}, actual={schema_version}"
+            f"expected={LEGACY_INFERENCE_SCHEMA_VERSION} 또는 "
+            f"{INFERENCE_SCHEMA_VERSION}, actual={schema_version}"
         )
 
     checkpoint_raw = _require_mapping(root["checkpoint"], field_name="checkpoint")
@@ -259,6 +328,18 @@ def load_pi0_inference_settings(
     _require_exact_keys(policy_raw, POLICY_KEYS, field_name="policy")
     _require_exact_keys(server_raw, SERVER_KEYS, field_name="server")
     _require_exact_keys(runtime_raw, RUNTIME_KEYS, field_name="runtime")
+
+    async_client_raw: dict[str, Any] | None = None
+    if schema_version == INFERENCE_SCHEMA_VERSION:
+        async_client_raw = _require_mapping(
+            root["async_client"],
+            field_name="async_client",
+        )
+        _require_exact_keys(
+            async_client_raw,
+            ASYNC_CLIENT_KEYS,
+            field_name="async_client",
+        )
 
     config_name = _validate_safe_name(
         _require_string(checkpoint_raw["config_name"], field_name="checkpoint.config_name"),
@@ -301,6 +382,15 @@ def load_pi0_inference_settings(
             f"{memory_fraction}; 허용={MIN_JAX_MEMORY_FRACTION}~{MAX_JAX_MEMORY_FRACTION}"
         )
 
+    async_client: AsyncClientSettings | None = None
+    if async_client_raw is not None:
+        async_values = validate_async_client_values(
+            async_client_raw,
+            action_horizon=PI0_ACTION_HORIZON,
+            aggregate_functions=ASYNC_AGGREGATE_FUNCTIONS,
+        )
+        async_client = AsyncClientSettings(**async_values)
+
     return Pi0InferenceSettings(
         config_path=resolved_config,
         workspace_root=resolved_workspace,
@@ -327,4 +417,5 @@ def load_pi0_inference_settings(
         ),
         server=InferenceServerSettings(host=host, port=port),
         runtime=InferenceRuntimeSettings(jax_memory_fraction=memory_fraction),
+        async_client=async_client,
     )

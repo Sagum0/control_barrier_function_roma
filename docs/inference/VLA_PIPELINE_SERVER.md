@@ -13,6 +13,9 @@
 client의 `--pretrained_name_or_path`는 gRPC 호환상 필수지만 서버의 모델 경로로
 사용하지 않는다. 실제 모델은 서버 YAML의 `checkpoint.run_name`과 `step`으로 고정된다.
 
+모델·chunk·queue·합성 파라미터의 쉬운 설명은
+[`VLA_PIPELINE_PARAMETERS.md`](../../config/inference/VLA_PIPELINE_PARAMETERS.md)에 있다.
+
 ## 서버 점검
 
 ```bash
@@ -23,6 +26,18 @@ cd /home/pc/vla_ws
   --step 30000 \
   --check-only
 ```
+
+## 같은 설정의 client 명령 확인
+
+```bash
+./scripts/inference/serve_vla_pipeline.py \
+  --config config/inference/pi0_piper_vla_pipeline.yaml \
+  --step 30000 \
+  --print-client-command
+```
+
+이 명령은 GPU를 초기화하지 않는다. 출력된 명령의 `/path/to/vla_pipeline`과
+`GPU_SERVER_IP`를 Piper PC의 실제 값으로 바꿔 실행한다.
 
 ## 서버 실행
 

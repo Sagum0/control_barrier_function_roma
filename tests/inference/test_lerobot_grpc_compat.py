@@ -93,15 +93,26 @@ def _timed_observation() -> TimedObservationCompat:
     )
 
 
+def _server_settings(actions_per_chunk: int = 32) -> SimpleNamespace:
+    """CPU loopback용 server와 async client 계약을 만든다."""
+
+    return SimpleNamespace(
+        server=SimpleNamespace(host="127.0.0.1", port=0),
+        async_client=SimpleNamespace(
+            observation_queue_timeout_seconds=1.0,
+            actions_per_chunk=actions_per_chunk,
+            fps=20,
+        ),
+    )
+
+
 class LeRobotGrpcCompatibilityTest(unittest.TestCase):
     """실제 gRPC method path와 pickle DTO 호환성을 함께 검사한다."""
 
     def test_loopback_returns_lerobot_timed_actions(self) -> None:
         """공식 client와 같은 네 RPC 순서로 `(N, 7)` action chunk를 받는다."""
 
-        settings = SimpleNamespace(
-            server=SimpleNamespace(host="127.0.0.1", port=0),
-        )
+        settings = _server_settings()
         server = create_lerobot_grpc_server(_FakePolicy(), settings)
         server.start()
         channel = grpc.insecure_channel(f"127.0.0.1:{server.bound_port}")
@@ -175,6 +186,11 @@ class LeRobotGrpcCompatibilityTest(unittest.TestCase):
         config = _remote_config()
         validate_remote_policy_config(config)
 
+        with self.assertRaisesRegex(ValueError, "server YAML"):
+            validate_remote_policy_config(
+                config, expected_actions_per_chunk=50
+            )
+
         config = _remote_config()
         config.lerobot_features["observation.state"]["dtype"] = "float64"
         with self.assertRaisesRegex(ValueError, "dtype"):
@@ -193,9 +209,7 @@ class LeRobotGrpcCompatibilityTest(unittest.TestCase):
     def test_invalid_policy_type_is_rejected(self) -> None:
         """기존 server에 다른 정책군을 요청하면 gRPC INVALID_ARGUMENT가 된다."""
 
-        settings = SimpleNamespace(
-            server=SimpleNamespace(host="127.0.0.1", port=0),
-        )
+        settings = _server_settings()
         server = create_lerobot_grpc_server(_FakePolicy(), settings)
         server.start()
         channel = grpc.insecure_channel(f"127.0.0.1:{server.bound_port}")

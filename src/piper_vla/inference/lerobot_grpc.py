@@ -28,7 +28,7 @@ from piper_vla.inference.observation import (
     build_canonical_observation,
     validate_policy_output,
 )
-from piper_vla.inference.romalab_contract import ACTION_HORIZON, CONTROL_FPS, ROBOT_DIM
+from piper_vla.inference.romalab_contract import ACTION_HORIZON, ROBOT_DIM
 
 
 # LeRobot 0.6 proto package와 service의 정확한 이름이다.
@@ -462,7 +462,11 @@ def _validate_feature_mapping(
             )
 
 
-def validate_remote_policy_config(config: RemotePolicyConfigCompat) -> None:
+def validate_remote_policy_config(
+    config: RemotePolicyConfigCompat,
+    *,
+    expected_actions_per_chunk: int | None = None,
+) -> None:
     """client 요청이 이 고정 π0 서버와 호환되는지 모델 로드 없이 검사한다."""
 
     if config.policy_type != "pi0":
@@ -473,6 +477,14 @@ def validate_remote_policy_config(config: RemotePolicyConfigCompat) -> None:
         raise ValueError(
             f"actions_per_chunk는 1~{ACTION_HORIZON}이어야 합니다: "
             f"{config.actions_per_chunk!r}"
+        )
+    if (
+        expected_actions_per_chunk is not None
+        and config.actions_per_chunk != expected_actions_per_chunk
+    ):
+        raise ValueError(
+            "client actions_per_chunk가 server YAML과 다릅니다: "
+            f"expected={expected_actions_per_chunk}, actual={config.actions_per_chunk}"
         )
     if not isinstance(config.device, str) or not config.device:
         raise ValueError("client policy_device는 비어 있지 않아야 합니다.")
@@ -546,8 +558,10 @@ class LeRobotGrpcPolicyService:
         policy: PolicyProtocol,
         *,
         observation_queue_timeout_seconds: float,
+        expected_actions_per_chunk: int,
+        control_fps: int,
     ) -> None:
-        """policy와 queue timeout을 저장하고 빈 client session을 준비한다."""
+        """policy와 YAML의 chunk·timing 계약을 저장하고 빈 session을 준비한다."""
 
         if not math.isfinite(observation_queue_timeout_seconds) or not (
             0.1 <= observation_queue_timeout_seconds <= 60.0
@@ -555,7 +569,15 @@ class LeRobotGrpcPolicyService:
             raise ValueError(
                 "observation_queue_timeout_seconds는 0.1~60.0이어야 합니다."
             )
+        if type(expected_actions_per_chunk) is not int or not 1 <= expected_actions_per_chunk <= ACTION_HORIZON:
+            raise ValueError(
+                f"expected_actions_per_chunk는 1~{ACTION_HORIZON}이어야 합니다."
+            )
+        if type(control_fps) is not int or not 1 <= control_fps <= 100:
+            raise ValueError("control_fps는 1~100이어야 합니다.")
         self._policy = policy
+        self._expected_actions_per_chunk = expected_actions_per_chunk
+        self._control_fps = control_fps
         self._observation_queue_timeout_seconds = observation_queue_timeout_seconds
         self._observation_queue: Queue[TimedObservationCompat] = Queue(maxsize=1)
         self._state_lock = threading.Lock()
@@ -580,7 +602,10 @@ class LeRobotGrpcPolicyService:
 
         try:
             config = restricted_client_loads(request.data, RemotePolicyConfigCompat)
-            validate_remote_policy_config(config)
+            validate_remote_policy_config(
+                config,
+                expected_actions_per_chunk=self._expected_actions_per_chunk,
+            )
         except Exception as error:
             context.abort(
                 self._grpc_status("INVALID_ARGUMENT"),
@@ -663,7 +688,7 @@ class LeRobotGrpcPolicyService:
             timed_actions = [
                 TimedActionCompat(
                     timestamp=float(timed_observation.timestamp)
-                    + index / float(CONTROL_FPS),
+                    + index / float(self._control_fps),
                     timestep=timed_observation.timestep + index,
                     action=torch.from_numpy(np.ascontiguousarray(action)),
                 )
@@ -743,13 +768,16 @@ def create_lerobot_grpc_server(
 
     import grpc
 
+    async_client = getattr(settings, "async_client", None)
+    if async_client is None:
+        raise ValueError(
+            "vla_pipeline gRPC server에는 schema 2 async_client 설정이 필요합니다."
+        )
     service = LeRobotGrpcPolicyService(
         policy,
-        observation_queue_timeout_seconds=(
-            settings.server.observation_queue_timeout_seconds
-            if hasattr(settings.server, "observation_queue_timeout_seconds")
-            else 1.0
-        ),
+        observation_queue_timeout_seconds=async_client.observation_queue_timeout_seconds,
+        expected_actions_per_chunk=async_client.actions_per_chunk,
+        control_fps=async_client.fps,
     )
     handlers = {
         "Ready": grpc.unary_unary_rpc_method_handler(

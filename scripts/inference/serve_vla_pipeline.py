@@ -85,6 +85,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="checkpoint와 내장 norm stats까지만 검증하고 종료",
     )
+    operation.add_argument(
+        "--print-client-command",
+        action="store_true",
+        help="같은 YAML 값으로 기존 vla_pipeline client 명령을 출력하고 종료",
+    )
     return parser
 
 
@@ -101,6 +106,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     base.configure_workspace_source_path()
 
     from piper_vla.inference.checkpoint import select_checkpoint
+    from piper_vla.inference.client_command import build_vla_pipeline_client_command
     from piper_vla.inference.settings import load_pi0_inference_settings
 
     parser = build_argument_parser()
@@ -109,6 +115,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error(f"--step은 양수여야 합니다: {namespace.step}")
 
     settings = load_pi0_inference_settings(namespace.config, WORKSPACE_ROOT)
+    async_client = settings.async_client
+    if async_client is None:
+        parser.error("vla_pipeline server config에는 schema 2 async_client가 필요합니다.")
     requested_step: int | str = "latest" if namespace.latest else (
         settings.checkpoint.step if namespace.step is None else namespace.step
     )
@@ -121,6 +130,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("Transport          : LeRobot 0.6 AsyncInference gRPC")
     print("Server             :", f"{settings.server.host}:{settings.server.port}")
     print("JAX memory fraction:", settings.runtime.jax_memory_fraction)
+    print("Actions per chunk  :", async_client.actions_per_chunk)
+    print("Queue threshold    :", async_client.chunk_size_threshold)
+    print("Aggregate function :", async_client.aggregate_fn_name)
+    print("Control FPS        :", async_client.fps)
+    print("Observation timeout:", async_client.observation_queue_timeout_seconds)
+    print("Queue visualization:", async_client.debug_visualize_queue_size)
+    if namespace.print_client_command:
+        print("\nClient command:")
+        print(
+            build_vla_pipeline_client_command(
+                settings,
+                requested_step=requested_step,
+            )
+        )
+        base.assert_lightweight_import_boundary()
+        return 0
     if namespace.print_config:
         base.assert_lightweight_import_boundary()
         return 0
