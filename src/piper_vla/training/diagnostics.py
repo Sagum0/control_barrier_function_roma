@@ -738,7 +738,7 @@ def run_training_loop_with_diagnostics(
     """학습 loop를 실행하며 sync 구간별 metric·시간·memory·checkpoint를 기록한다."""
 
     # 순환 import를 피하면서 검증된 학습 helper를 runtime에 재사용한다.
-    from piper_vla import pi0_training as training
+    from piper_vla.training import trainer as training
 
     if first_batch_data_time_s < 0:
         raise ValueError(f"첫 batch data 시간이 음수입니다: {first_batch_data_time_s}")

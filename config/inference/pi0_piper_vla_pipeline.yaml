@@ -25,6 +25,8 @@ client:
   # control loop 시작 후 자동 종료 시간(초). null이면 무제한 실행.
   episode_time_seconds: 35
   actions_per_chunk: 50
+  chunk_size_threshold: 1.0
+  aggregate_fn_name: weighted_average
   fps: 20
   observation_queue_timeout_seconds: 1.0
   # mode가 sync이면 아래 세 값은 검증만 하고 client 동작에는 사용하지 않는다.
