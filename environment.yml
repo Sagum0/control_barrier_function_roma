@@ -1,0 +1,17 @@
+# cbf_ws conda environment (`zed`), Python 3.10 — minimal deps for the workspace code.
+#   conda env create -f environment.yml
+#   conda activate zed
+#   pip install requests                        # only needed by the next line
+#   python /usr/local/zed/get_python_api.py     # pyzed (after ZED SDK 5.4 install)
+# See SETUP.md.
+name: zed
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - numpy==2.2.6
+      - opencv-python==5.0.0.93
+      # pyzed: NOT installable here — run get_python_api.py after activating this env.

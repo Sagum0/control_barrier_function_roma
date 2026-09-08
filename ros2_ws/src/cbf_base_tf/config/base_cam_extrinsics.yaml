@@ -1,0 +1,16 @@
+# 실측 전 형식 확인용 placeholder다. 배포 시 measure_base_cam.py 출력으로 교체한다.
+coordinate_system: RIGHT_HANDED_Z_UP_X_FWD
+unit: METER
+transforms:
+  - parent: base
+    child: zed1_link
+    translation: [0.0, 0.0, 0.0]
+    rotation_quat: [0.0, 0.0, 0.0, 1.0]
+  - parent: base
+    child: zed2_link
+    translation: [0.0, 0.0, 0.0]
+    rotation_quat: [0.0, 0.0, 0.0, 1.0]
+  - parent: base
+    child: fusion_world
+    translation: [0.0, 0.0, 0.0]
+    rotation_quat: [0.0, 0.0, 0.0, 1.0]

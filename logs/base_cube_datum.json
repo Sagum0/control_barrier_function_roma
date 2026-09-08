@@ -1,0 +1,12 @@
+{
+  "coordinate_system": "RIGHT_HANDED_Z_UP_X_FWD",
+  "unit": "METER",
+  "dictionary": "DICT_5X5_100",
+  "tag_size_m": 0.10,
+  "note": "검은 사각형 100mm(tag_size). 큐브 겉면 99mm -> 반 변 0.0495m(대략 실측). 마커 중앙·정립(위=+Z) 부착.",
+  "markers": [
+    { "id": 1, "center_m": [0.0, 0.0, 0.0], "normal": [1, 0, 0], "up": [0, 0, 1], "face": "정면 +X" },
+    { "id": 2, "center_m": [-0.0495, 0.0495, 0.0], "normal": [0, 1, 0], "up": [0, 0, 1], "face": "왼쪽 +Y" },
+    { "id": 0, "center_m": [-0.0495, -0.0495, 0.0], "normal": [0, -1, 0], "up": [0, 0, 1], "face": "오른쪽 -Y" }
+  ]
+}

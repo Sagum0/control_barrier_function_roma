@@ -1,0 +1,56 @@
+# 운영체제·편집기 부산물
+.DS_Store
+Thumbs.db
+*~
+.vscode/
+
+# Python 캐시·로컬 가상환경
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# AI 에이전트 실행 산출물·개인 설정
+.codex/
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/plans/
+.agents/
+
+# 비밀 설정·인증서·키 (실제 값은 환경변수로 주입)
+.mcp.json
+.mcp.local.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+secrets*.json
+
+# 대용량 실측 데이터는 로컬에만 보관
+logs/*.svo2
+logs/**/*.svo2
+logs/*.mp4
+logs/**/*.mp4
+logs/*.jsonl
+logs/**/*.jsonl
+logs/fulllog_*/
+
+# 패키지·압축 배포물은 저장소에서 재생성
+*.whl
+*.tar.gz
+
+# ROS2 로컬 빌드 산출물
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/

@@ -1,0 +1,24 @@
+{
+  "config": "/home/pc/cbf_ws/logs/fusion_manual.json",
+  "serials": [
+    13870389,
+    19321109
+  ],
+  "frame": "fusion_world",
+  "coordinate_system": "RIGHT_HANDED_Z_UP_X_FWD",
+  "unit": "METER",
+  "fps": 30,
+  "resolution": "HD720",
+  "depth": "NEURAL",
+  "sender_body_format": "BODY_18",
+  "fused_body_format": "BODY_34",
+  "manual_config_note": "manual configs are only for pipeline bootstrap; use ZED360 for quantitative fusion.",
+  "runtime": {
+    "sender_conf": 40,
+    "skeleton_minimum_allowed_keypoints": 7,
+    "skeleton_minimum_allowed_camera": 1,
+    "skeleton_smoothing": 0.1
+  },
+  "log_path": "/home/pc/cbf_ws/logs/fusion_20260717_154449.jsonl",
+  "topdown_path": "/home/pc/cbf_ws/logs/fusion_topdown_20260717_154449.mp4"
+}

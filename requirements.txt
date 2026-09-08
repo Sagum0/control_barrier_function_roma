@@ -1,0 +1,11 @@
+# cbf_ws — Python dependencies actually used by the workspace code (scripts/*.py).
+# conda env `zed`, Python 3.10.  Full setup: see SETUP.md.
+#
+# pyzed is intentionally NOT listed: it is provided by the ZED SDK, not PyPI.
+#   After installing ZED SDK 5.4:
+#   conda activate zed && python /usr/local/zed/get_python_api.py
+#   (fetches pyzed-5.4-cp310 matching your SDK + CUDA + Python;
+#    that step needs `requests` in the env: pip install requests)
+
+numpy==2.2.6
+opencv-python==5.0.0.93

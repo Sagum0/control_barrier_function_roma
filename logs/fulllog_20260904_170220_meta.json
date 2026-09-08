@@ -1,0 +1,45 @@
+{
+  "args": {
+    "config": "/home/pc/cbf_ws/logs/fusion_zed360.json",
+    "res": "HD720",
+    "fps": 30,
+    "depth": "NEURAL",
+    "conf": 40,
+    "duration": 60.0,
+    "outdir": "logs",
+    "min_keypoints": 7,
+    "min_cameras": 1,
+    "smoothing": 0.1,
+    "retry_count": 3,
+    "retry_wait": 1.0,
+    "verbose_fusion": false,
+    "record_svo": null,
+    "metrics_every": 30,
+    "no_raw": false,
+    "no_video": false
+  },
+  "config": "/home/pc/cbf_ws/logs/fusion_zed360.json",
+  "sdk_version": "5.4.0",
+  "serials": [
+    13870389,
+    19321109
+  ],
+  "body_format": {
+    "sender": "BODY_18",
+    "fused": "BODY_34"
+  },
+  "coordinate_system": "RIGHT_HANDED_Z_UP_X_FWD",
+  "unit": "METER",
+  "log_path": "/home/pc/cbf_ws/logs/fulllog_20260904_170220.jsonl",
+  "video_paths": [
+    {
+      "serial_number": 13870389,
+      "path": "/home/pc/cbf_ws/logs/fulllog_20260904_170220_cam13870389.mp4"
+    },
+    {
+      "serial_number": 19321109,
+      "path": "/home/pc/cbf_ws/logs/fulllog_20260904_170220_cam19321109.mp4"
+    }
+  ],
+  "svo_paths": []
+}

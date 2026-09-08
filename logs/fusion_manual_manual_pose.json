@@ -1,0 +1,33 @@
+{
+  "warning": "manual Fusion config; use ZED360 output for quantitative skeleton fusion",
+  "coordinate_system": "RIGHT_HANDED_Z_UP_X_FWD",
+  "unit": "METER",
+  "left": {
+    "serial": 13870389,
+    "translation_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "rpy_deg": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "right": {
+    "serial": 19321109,
+    "translation_m": [
+      0.0,
+      -1.5,
+      0.0
+    ],
+    "rpy_deg": [
+      0.0,
+      0.0,
+      180.0
+    ]
+  },
+  "override_gravity": true,
+  "fusion_config": "/home/pc/cbf_ws/logs/fusion_manual.json"
+}
