@@ -1,0 +1,22 @@
+schema_version: 1
+
+checkpoint:
+  runs_root: data/runs
+  config_name: pi05_piper_lora
+  # vision-frozen 완료 run. vision-trainable 사용 시 vt run 이름으로 바꾼다.
+  run_name: two_block_pnp_pi05_b32_vf_s30000_r001
+  asset_id: two_block_pnp
+  step: 30000
+
+policy:
+  prompt: "pick up the green blocks one at a time and place them in the white box"
+  # π0.5 flow-matching Euler 적분 횟수. 학습 step이나 action chunk 길이가 아니다.
+  num_inference_steps: 10
+
+server:
+  host: 127.0.0.1
+  # π0 기본 8000과 동시에 실행할 수 있도록 다른 port를 사용한다.
+  port: 8001
+
+runtime:
+  jax_memory_fraction: 0.60

@@ -3,17 +3,17 @@
 ## 어떤 YAML을 사용해야 하는가
 
 기존 `vla_pipeline`을 그대로 사용할 때는
-[`pi0_piper_vla_pipeline.yaml`](./pi0_piper_vla_pipeline.yaml)을 사용한다.
+[`pi0/piper_vla_pipeline.yaml`](./pi0/piper_vla_pipeline.yaml)을 사용한다.
 
-[`pi0_piper_inference.yaml`](./pi0_piper_inference.yaml)은 기존 `vla_pipeline`을 거치지
+[`pi0/piper_inference.yaml`](./pi0/piper_inference.yaml)은 기존 `vla_pipeline`을 거치지
 않고 새로운 WebSocket adapter를 직접 작성할 때 사용하는 별도 설정이다. 두 설정은 같은
 π0 checkpoint를 읽지만, 로봇 쪽 client와 통신하는 방식이 다르다.
 
-| 구분 | `pi0_piper_inference.yaml` | `pi0_piper_vla_pipeline.yaml` |
+| 구분 | `pi0/piper_inference.yaml` | `pi0/piper_vla_pipeline.yaml` |
 |---|---|---|
 | 주 용도 | 새로 만드는 범용 adapter | 기존 `vla_pipeline` 연동 |
 | 통신 방식 | OpenPI WebSocket | LeRobot 0.6 AsyncInference gRPC |
-| 실행 파일 | `scripts/inference/serve_policy.py` | server: `scripts/inference/serve_vla_pipeline.py`<br>client: `scripts/inference/run_vla_pipeline_client.py` |
+| 실행 파일 | `scripts/inference/pi0/serve_policy.py` | server: `scripts/inference/pi0/serve_vla_pipeline.py`<br>client: `scripts/inference/pi0/run_vla_pipeline_client.py` |
 | 기본 포트 | `8000` | `8080` |
 | 입력 방식 | RGB 영상 2개, 7D state, prompt를 직접 전송 | LeRobot feature handshake와 observation queue 사용 |
 | 출력 방식 | `(50, 7)` absolute action 배열 | timestamp가 포함된 `TimedAction` chunk |
@@ -36,15 +36,15 @@
 ### 기존 `vla_pipeline`을 사용할 때
 
 ```bash
-./scripts/inference/serve_vla_pipeline.py \
-  --config config/inference/pi0_piper_vla_pipeline.yaml
+./scripts/inference/pi0/serve_vla_pipeline.py \
+  --config config/inference/pi0/piper_vla_pipeline.yaml
 ```
 
 다른 terminal에서 같은 YAML을 반영한 Piper client를 실행한다.
 
 ```bash
-./scripts/inference/run_vla_pipeline_client.py \
-  --config config/inference/pi0_piper_vla_pipeline.yaml
+./scripts/inference/pi0/run_vla_pipeline_client.py \
+  --config config/inference/pi0/piper_vla_pipeline.yaml
 ```
 
 서버와 client는 YAML의 `checkpoint.step`을 사용한다. `--step`을 주면 그 실행에 한해 YAML
@@ -55,7 +55,7 @@
 
 ## 동기·비동기 모드 변경
 
-[`pi0_piper_vla_pipeline.yaml`](./pi0_piper_vla_pipeline.yaml)의 한 줄만 바꾼다.
+[`pi0/piper_vla_pipeline.yaml`](./pi0/piper_vla_pipeline.yaml)의 한 줄만 바꾼다.
 
 ```yaml
 client:
@@ -136,14 +136,25 @@ action을 실행한다. 추론 시간에는 로봇 action 발행이 멈추므로
 ### 새 WebSocket adapter를 사용할 때
 
 ```bash
-./scripts/inference/serve_policy.py \
-  --config config/inference/pi0_piper_inference.yaml \
+./scripts/inference/pi0/serve_policy.py \
+  --config config/inference/pi0/piper_inference.yaml \
   --step 30000
 ```
 
 ## 추가 문서
 
 - 동기·비동기 chunk 파라미터 상세 설명:
-  [VLA_PIPELINE_PARAMETERS.md](./VLA_PIPELINE_PARAMETERS.md)
+  [VLA_PIPELINE_PARAMETERS.md](./pi0/VLA_PIPELINE_PARAMETERS.md)
 - 서버 실행·입출력·ROS 계약:
-  [추론 문서](../../docs/inference/README.md)
+  [추론 문서](../../docs/inference/pi0/README.md)
+
+## π0.5 사용
+
+π0.5도 같은 WebSocket·vla_pipeline transport를 사용하지만 모델, tokenizer와 quantile
+normalization은 별도 loader가 복원한다. 아래 두 YAML과 `scripts/inference/pi05/`의 같은
+이름 launcher를 사용한다.
+
+| 연결 방식 | π0.5 설정 |
+|---|---|
+| OpenPI WebSocket | `pi05/piper_inference.yaml` |
+| 기존 vla_pipeline gRPC | `pi05/piper_vla_pipeline.yaml` |

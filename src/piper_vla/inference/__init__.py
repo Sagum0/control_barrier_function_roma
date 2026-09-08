@@ -1,1 +1,1 @@
-"""Piper π0 정책 서버와 RoMaLab ROS2 adapter를 분리한 추론 package다."""
+"""Piper 모델 계열별 추론과 공통 transport package를 제공한다."""

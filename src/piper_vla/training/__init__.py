@@ -1,1 +1,1 @@
-"""Piper π0 학습·데이터·진단 구현을 모은 production 패키지다."""
+"""Piper 모델 계열별 학습 package를 제공한다."""

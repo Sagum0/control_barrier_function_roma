@@ -1,0 +1,34 @@
+schema_version: 4
+
+checkpoint:
+  runs_root: data/runs
+  config_name: pi0_piper_lora
+  run_name: two_block_pnp_b32_vt_s30000_r002
+  asset_id: two_block_pnp
+  # 실행할 정확한 checkpoint step. 해당 완료 checkpoint가 없으면 서버가 종료된다.
+  step: 30000
+
+policy:
+  prompt: "pick up the green blocks one at a time and place them in the white box"
+  num_inference_steps: 10
+
+server:
+  host: 127.0.0.1
+  port: 8080
+
+runtime:
+  jax_memory_fraction: 0.70
+
+client:
+  # async: 추론과 action 실행을 중첩, sync: 한 chunk 추론 완료 후 순차 실행.
+  mode: sync
+  # control loop 시작 후 자동 종료 시간(초). null이면 무제한 실행.
+  episode_time_seconds: 35
+  actions_per_chunk: 50
+  fps: 20
+  observation_queue_timeout_seconds: 1.0
+  # mode가 sync이면 아래 세 값은 검증만 하고 client 동작에는 사용하지 않는다.
+  async_options:
+    chunk_size_threshold: 1.0
+    aggregate_fn_name: weighted_average
+    debug_visualize_queue_size: false

@@ -1,0 +1,35 @@
+schema_version: 4
+
+checkpoint:
+  runs_root: data/runs
+  config_name: pi05_piper_lora
+  # vision-frozen 완료 run. vision-trainable 사용 시 vt run 이름으로 바꾼다.
+  run_name: two_block_pnp_pi05_b32_vf_s30000_r001
+  asset_id: two_block_pnp
+  step: 30000
+
+policy:
+  prompt: "pick up the green blocks one at a time and place them in the white box"
+  num_inference_steps: 10
+
+server:
+  host: 127.0.0.1
+  # π0 vla_pipeline 기본 8080과 충돌하지 않는 port다.
+  port: 8081
+
+runtime:
+  jax_memory_fraction: 0.60
+
+client:
+  # sync: chunk 추론 후 순차 실행, async: 추론과 실행을 중첩한다.
+  mode: sync
+  # null이면 Ctrl+C까지 실행한다.
+  episode_time_seconds: 35
+  actions_per_chunk: 50
+  fps: 20
+  observation_queue_timeout_seconds: 1.0
+  # sync에서는 검증만 하고 사용하지 않는다.
+  async_options:
+    chunk_size_threshold: 1.0
+    aggregate_fn_name: weighted_average
+    debug_visualize_queue_size: false
